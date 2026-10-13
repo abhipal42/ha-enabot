@@ -2,7 +2,7 @@ name: EBO for Home Assistant (unofficial)
 version: "0.26.107"
 slug: ebo
 description: Unofficial, free community add-on to manage Enabot EBO robots in Home Assistant (panel, camera, entities). Not affiliated with Enabot.
-url: https://github.com/Playcolors-co/ha-enabot
+url: https://github.com/abhipal42/ha-enabot
 # Reverse-engineered, unofficial, undocumented cloud API: mark as experimental.
 stage: experimental
 # The Agora SDK (agora-python-server-sdk >= 2.2) ships glibc builds for x86_64 AND aarch64,
