@@ -40,8 +40,14 @@ RUN (apt-get update \
 # mediamtx (RTSP server). Downloaded from GitHub; make it non-fatal so a GitHub
 # outage/rate-limit can't fail the whole image rebuild (video is off by default anyway).
 ARG MEDIAMTX_VERSION=1.9.3
-RUN curl -fsSL --retry 5 --retry-delay 3 \
-      "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/mediamtx_v${MEDIAMTX_VERSION}_linux_amd64.tar.gz" \
+# Pick the mediamtx build that matches the image's CPU (amd64 or arm64v8 for Raspberry Pi 4/5).
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) MTX_ARCH=amd64 ;; \
+        arm64) MTX_ARCH=arm64v8 ;; \
+        *) echo "unsupported arch $(dpkg --print-architecture)"; exit 1 ;; \
+    esac \
+    && curl -fsSL --retry 5 --retry-delay 3 \
+      "https://github.com/bluenviron/mediamtx/releases/download/v${MEDIAMTX_VERSION}/mediamtx_v${MEDIAMTX_VERSION}_linux_${MTX_ARCH}.tar.gz" \
       | tar xz -C /usr/local/bin mediamtx \
     || echo "WARN: mediamtx download failed — video will be unavailable"
 

@@ -5,9 +5,11 @@ description: Unofficial, free community add-on to manage Enabot EBO robots in Ho
 url: https://github.com/Playcolors-co/ha-enabot
 # Reverse-engineered, unofficial, undocumented cloud API: mark as experimental.
 stage: experimental
-# The Agora SDK is built for x86_64 (glibc) only. HAOS on Proxmox/NUC is amd64.
+# The Agora SDK (agora-python-server-sdk >= 2.2) ships glibc builds for x86_64 AND aarch64,
+# so this runs on HAOS on Proxmox/NUC (amd64) and on Raspberry Pi 4/5 (aarch64).
 arch:
   - amd64
+  - aarch64
 startup: application
 boot: auto
 # Only the ports the OUTSIDE world (your browser) must reach are host-mapped. RTSP (8554…) and HLS
