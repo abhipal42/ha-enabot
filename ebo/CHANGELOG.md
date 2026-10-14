@@ -1,5 +1,13 @@
 # Changelog — Enabot integration
 
+## 0.28.7 — EBO SE: fix avClientStartEx on arm64 (-20000)
+
+- With DNS fixed, the P2P connect succeeded but the AV channel auth failed with -20000
+  (AV_ER_INVALID_ARG): the native bridge built St_AVClientStartInConfig with hand-poked 32-bit
+  offsets, so on arm64 (8-byte pointers) the account/password pointers overlapped. Rebuilt the
+  native bridge using a real C struct (correct layout on 32- and 64-bit). Re-drop the refreshed
+  bundle (new ebo_bridge) and restart; no add-on image change.
+
 ## 0.28.6 — EBO SE: DNS forwarder so the native resolver works in-container
 
 - Even with ANDROID_DNS_MODE=local, this bionic libc has no DNS servers in the container (it reads
