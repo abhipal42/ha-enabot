@@ -1,5 +1,10 @@
 # Changelog — Enabot integration
 
+## 0.28.10 — EBO SE: fix inverted forward/back
+
+- Driving works; the forward/back (ly) axis was inverted — pushing up drove backward. Negate ly in
+  the move/vector and joystick handlers so the panel's "up" drives forward. (Left/right unchanged.)
+
 ## 0.28.9 — EBO SE: fix the control pipe (commands reached the bridge but not the robot)
 
 - Driving/controls did nothing even though the panel sent the commands and the Python write
