@@ -1,5 +1,11 @@
 # Changelog — Enabot integration
 
+## 0.28.2 — EBO SE: default the native stack to the config dir
+- `se_dir` now defaults to `<config>/ebo` (shown as `/config/ebo` in the File editor add-on) instead
+  of `/share/ebo`, so you can drop the `ebo-se-share.tgz` bundle straight into the File editor's
+  `/config` root — no `enforce_basepath`/`/share` tweak needed. The add-on also looks for the bundle
+  in `/config` (and still `/share`). Set the `se_dir` option to override (e.g. `/share/ebo`).
+
 ## 0.28.1 — EBO SE: auto-unpack the native stack
 - You no longer hand-place the SE's native files. Drop `ebo-se-share.tgz` (ebo_bridge + lib/ +
   bionic/) into `/share` with the File editor add-on; on boot the add-on unpacks it into `se_dir`

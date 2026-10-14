@@ -214,18 +214,28 @@ fi
 
 # --- EBO SE robots (LAN / TUTK) ---
 # The EBO SE is a LOCAL robot (not on the Enabot cloud for streaming); its native bridge + TUTK/bionic
-# runtime live in se_dir (default /share/ebo) and are NOT shipped in the image (see docs/EBO-SE.md).
+# runtime live in se_dir and are NOT shipped in the image (see docs/EBO-SE.md).
 # Two ways to get each robot's TUTK credentials:
 #   (a) se_cloud: true  — log into the ROLA cloud with your email+password and DISCOVER them (plus a
 #       fresh stream-start token), so you hand-extract nothing per robot. Needs the app keys below.
 #   (b) se_robots: [...] — list each robot's credentials manually.
-export EBO_SE_DIR="$(pget se_dir /share/ebo)"
+# se_dir default: a subfolder of the Home Assistant config dir (the one the File editor add-on shows
+# as /config), so you can drop/extract the bundle there with no extra add-on settings. Override with
+# the `se_dir` option (e.g. /share/ebo) if you prefer /share.
+_SE_DIR_OPT="$(pget se_dir '')"
+if [ -n "$_SE_DIR_OPT" ]; then
+  export EBO_SE_DIR="$_SE_DIR_OPT"
+else
+  export EBO_SE_DIR="${HA_ROOT:-/config}/ebo"
+fi
 
 # Auto-provision the native stack: the proprietary TUTK libs can't ship in the image, so you drop the
-# bundle (ebo-se-share.tgz: ebo_bridge + lib/ + bionic/) into /share once. On boot we unpack it into
-# se_dir and set perms — no SSH/tar/chmod needed. Re-extracts only when the bridge is missing or the
-# tarball is newer, so it's cheap on every start.
-for _TGZ in "$EBO_SE_DIR/ebo-se-share.tgz" /share/ebo-se-share.tgz /share/ebo.tgz; do
+# bundle (ebo-se-share.tgz: ebo_bridge + lib/ + bionic/) once — into the File editor's /config root
+# (or /share). On boot we unpack it into se_dir and set perms — no SSH/tar/chmod needed. Re-extracts
+# only when the bridge is missing or the tarball is newer, so it's cheap on every start.
+for _TGZ in "$EBO_SE_DIR/ebo-se-share.tgz" \
+            "${HA_ROOT:-/config}/ebo-se-share.tgz" "${HA_ROOT:-/config}/ebo.tgz" \
+            /share/ebo-se-share.tgz /share/ebo.tgz; do
   [ -f "$_TGZ" ] || continue
   if [ ! -x "$EBO_SE_DIR/ebo_bridge" ] || [ "$_TGZ" -nt "$EBO_SE_DIR/ebo_bridge" ]; then
     mkdir -p "$EBO_SE_DIR"
