@@ -42,7 +42,11 @@ import time
 import urllib.parse
 import urllib.request
 
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
+try:  # CFB moved to decrepit in newer cryptography; avoid the deprecation warning when present
+    from cryptography.hazmat.decrepit.ciphers.modes import CFB as _CFB
+except Exception:
+    from cryptography.hazmat.primitives.ciphers.modes import CFB as _CFB
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 HOST = os.environ.get("EBO_SE_CLOUD_HOST", "ebo.enabotserverintl.com")
@@ -65,9 +69,11 @@ class CloudError(RuntimeError):
 
 
 def _diag(*a):
-    """Structural diagnostics to stderr (run.sh surfaces these to the add-on log). NEVER prints
-    secret values — only shapes, counts, key names, HTTP codes."""
+    """Structural diagnostics to stderr — only when EBO_SE_DEBUG=1 (run.sh surfaces them to the
+    add-on log). NEVER prints secret values — only shapes, counts, key names, HTTP codes."""
     import sys
+    if os.environ.get("EBO_SE_DEBUG", "") != "1":
+        return
     sys.stderr.write("[diag] " + " ".join(str(x) for x in a) + "\n")
 
 
@@ -213,7 +219,7 @@ def build_ioctl9930(user_id, user_auth_token):
     if len(UAT_KEY) not in (16, 24, 32):
         raise CloudError("EBO_SE_UAT_KEY must be 16/24/32 bytes (got %d)" % len(UAT_KEY))
     iv = secrets.token_bytes(16)
-    enc = Cipher(algorithms.AES(UAT_KEY), modes.CFB(iv)).encryptor()
+    enc = Cipher(algorithms.AES(UAT_KEY), _CFB(iv)).encryptor()
     ct = enc.update(user_auth_token.encode()) + enc.finalize()
     blob = iv + ct
     buf = bytearray(1016)
