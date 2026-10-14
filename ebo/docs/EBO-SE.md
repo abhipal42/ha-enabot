@@ -48,11 +48,12 @@ files below (e.g. over Samba, or the SSH/Terminal add-on):
 │   ├── libc++.so
 │   ├── liblog.so
 │   └── libstdc++.so
-└── ioctl9930.bin       # captured "start streaming" payload (see step 3)
+└── ioctl9930.bin       # ONLY for manual mode (Option B) — cloud discovery generates it for you
 ```
 
-The `.so` files, the bionic runtime and `ioctl9930.bin` are proprietary / device-specific and are
-**not** distributed here. You extract them once from software and hardware you own.
+The `.so` files and the bionic runtime are proprietary / device-specific and are **not** distributed
+here. You extract them once from software and hardware you own. (`ioctl9930.bin` is needed only for
+manual mode — cloud discovery generates a fresh one per connect.)
 
 ## 2. Build the native bridge (64-bit)
 
@@ -67,31 +68,64 @@ NDK=/path/to/android-ndk ARCH=arm64 ./se/build_bridge.sh
 Copy the result to `/share/ebo-se/ebo_bridge`. The binary's bitness must match the `lib/` and
 `bionic/` files — 64-bit binary ⇒ 64-bit (`arm64-v8a`) `.so` files and the 64-bit `linker64`.
 
-## 3. Get the TUTK libraries, runtime, blob and credentials
+## 3. Get the TUTK libraries + runtime
 
-Follow lilium360's guide — it covers all of these in detail:
+Follow lilium360's guide for the `lib/` and `bionic/` files:
 <https://github.com/lilium360/ebo-se-lan-bridge/blob/main/docs/SETUP.md>
 
-In short:
 - **TUTK `.so` (`lib/`)** — from the ROLA app's `lib/arm64-v8a/` (use the **arm64** ones for a 64-bit build).
 - **bionic runtime (`bionic/`)** — pulled from a 64-bit Android system (`linker64` + the listed libs).
-- **`ioctl9930.bin`** — the captured stream-start payload.
-- **Credentials** — the five per-robot values below, extracted from the ROLA app while it connects
-  to *your* robot:
 
-| Config field | TUTK source |
-|---|---|
-| `uid` | the 20-char TUTK UID |
-| `authkey` | `St_IOTCConnectInput.authKey` |
-| `identity` | `avClientStartEx` account / identity |
-| `token` | `avClientStartEx` password / token |
-| `license` | `TUTK_SDK_Set_License_Key` argument |
+These are proprietary / device-specific and are **not** distributed here.
 
-These belong to your device/app; keep them private. They never leave your Home Assistant.
+## 4. Choose how the robot credentials are supplied
 
-## 4. Add the robot(s) to the add-on config
+Each SE needs five TUTK values (UID, identity, token, authKey, license) and a per-connect
+stream-start token. You can let the add-on **discover them from the ROLA cloud** (recommended), or
+enter them **manually**.
 
-In the add-on **Configuration** tab:
+### Option A — cloud discovery (recommended, least setup)
+
+Set `se_cloud: true` and give the add-on your **ROLA email + password** plus the app's keys. The
+add-on then logs in like the ROLA app, pulls your robot list, and derives every TUTK value **and a
+fresh stream-start token** automatically — so you hand-extract nothing per robot, and you **don't
+need `ioctl9930.bin`** at all.
+
+The keys are the app's symmetric secrets — the **same kind** the cloud (EBO HOME) models already
+need in this add-on, and quite possibly the *same values* you already configured there. They are
+**not shipped**; you extract them once from your own app (jadx for the Java-side key, Frida for the
+native-side keys — see [GET-APP-KEYS.md](GET-APP-KEYS.md) and [`tools/extract_keys.js`](../tools/extract_keys.js)).
+ROLA field names:
+
+| Config field | ROLA app field (`SignatureHelper`) | used for |
+|---|---|---|
+| `se_body_key` | `bodyEncryptKeyS2` | encrypt the login body (AES-GCM) |
+| `se_sign_key` | `accessKeySecretS2` | sign requests (HMAC-SHA1) |
+| `se_uat_key`  | `userAuthTokenKey` | the stream-start token (AES-CFB) |
+| `se_license`  | `TUTK_SDK_Set_License_Key` arg | TUTK license (app constant) |
+| `se_authkey`  | `St_IOTCConnectInput.authKey` | TUTK connect authKey (app constant) |
+
+```yaml
+se_dir: /share/ebo-se
+se_cloud: true
+se_email: "you@example.com"
+se_password: "your-rola-password"
+se_body_key: "................"
+se_sign_key: "................"
+se_uat_key:  "................"
+se_license:  "................"
+se_authkey:  "........"
+# se_login_region: GB          # match your account region
+# se_cloud_host: ebo.enabotserverintl.com   # CN accounts: ebo.enabotserver.com
+```
+
+Keys and password never leave your Home Assistant. If discovery fails, the add-on log points to
+`/data/se_discover.log`.
+
+### Option B — manual per-robot credentials
+
+If you'd rather not supply the cloud keys, extract the five TUTK values per robot yourself (per
+lilium360's guide) and drop an `ioctl9930.bin` into `se_dir`:
 
 ```yaml
 se_dir: /share/ebo-se
@@ -104,8 +138,13 @@ se_robots:
     license: "xxxxxxxx"
 ```
 
-Start (or restart) the add-on. The SE appears in the panel and, after one Home Assistant restart,
-as an **EBO** device with a live camera — same as a cloud robot.
+(With Option B you also need `se_dir/ioctl9930.bin`, the captured stream-start payload.)
+
+## 5. Start
+
+Start (or restart) the add-on. Each SE appears in the panel and, after one Home Assistant restart,
+as an **EBO** device with a live camera — same as a cloud robot. You can mix cloud-discovered and
+manual robots, and run them alongside your cloud Air 2.
 
 ## Notes & limits
 

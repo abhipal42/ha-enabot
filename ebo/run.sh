@@ -212,17 +212,49 @@ if [ "$NR" -eq 0 ]; then
 fi
 [ "$NR" -gt 1 ] && echo "[add-on] ${NR} robots on the account — running one bridge each"
 
-# --- EBO SE robots (LAN / TUTK) listed in the add-on config ---
-# These are LOCAL robots (not on the Enabot cloud account), each described by the credentials you
-# extracted from your own robot (see docs/EBO-SE.md). Their native bridge + TUTK/bionic runtime live
-# in the config dir pointed to by `se_dir` (default /share/ebo-se) and are NOT shipped in the image.
+# --- EBO SE robots (LAN / TUTK) ---
+# The EBO SE is a LOCAL robot (not on the Enabot cloud for streaming); its native bridge + TUTK/bionic
+# runtime live in se_dir (default /share/ebo-se) and are NOT shipped in the image (see docs/EBO-SE.md).
+# Two ways to get each robot's TUTK credentials:
+#   (a) se_cloud: true  — log into the ROLA cloud with your email+password and DISCOVER them (plus a
+#       fresh stream-start token), so you hand-extract nothing per robot. Needs the app keys below.
+#   (b) se_robots: [...] — list each robot's credentials manually.
 export EBO_SE_DIR="$(pget se_dir /share/ebo-se)"
-NSE="$(jq -r '(.se_robots // []) | length' "$OPTS" 2>/dev/null || echo 0)"
-case "$NSE" in ''|*[!0-9]*) NSE=0;; esac
+# app keys + constants you supply (same posture as the cloud models; may equal your EBO HOME keys).
+export EBO_SE_BODY_KEY="$(jq -r '.se_body_key // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_SIGN_KEY="$(jq -r '.se_sign_key // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_UAT_KEY="$(jq -r '.se_uat_key // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_LICENSE_CONST="$(jq -r '.se_license // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_AUTHKEY_CONST="$(jq -r '.se_authkey // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_EMAIL="$(jq -r '.se_email // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_PASSWORD="$(jq -r '.se_password // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_CLOUD_HOST="$(pget se_cloud_host ebo.enabotserverintl.com)"
+export EBO_SE_LOGIN_REGION="$(pget se_login_region GB)"
+
+# manual list count
+NSE_MANUAL="$(jq -r '(.se_robots // []) | length' "$OPTS" 2>/dev/null || echo 0)"
+case "$NSE_MANUAL" in ''|*[!0-9]*) NSE_MANUAL=0;; esac
+
+# cloud discovery (optional): emit one TSV line per SE into a temp file for the launch loop below.
+SE_DISCO=/data/se_discovered.tsv
+: > "$SE_DISCO"
+NSE_CLOUD=0
+if [ "$(pget se_cloud false)" = "true" ] && [ -n "$EBO_SE_EMAIL" ] && [ -n "$EBO_SE_PASSWORD" ]; then
+  echo "[add-on] EBO SE: discovering robots via the ROLA cloud…"
+  if python /app/ebo_se_cloud.py --emit > "$SE_DISCO" 2>/data/se_discover.log; then
+    NSE_CLOUD="$(grep -c . "$SE_DISCO" 2>/dev/null || echo 0)"
+    echo "[add-on] EBO SE: discovered ${NSE_CLOUD} robot(s) from the cloud"
+  else
+    echo "[add-on] EBO SE: cloud discovery failed (see /data/se_discover.log) — check email/password + app keys"
+    : > "$SE_DISCO"
+  fi
+fi
+
+NSE=$(( NSE_MANUAL + NSE_CLOUD ))
 # total robot count decides whether EVERY robot needs a distinct node/RTSP port (even one cloud
 # robot must move off the default path once an SE shares the broker).
 TOTAL=$(( NR + NSE ))
-[ "$NSE" -gt 0 ] && echo "[add-on] ${NSE} EBO SE robot(s) configured (dir: ${EBO_SE_DIR})"
+[ "$NSE" -gt 0 ] && echo "[add-on] ${NSE} EBO SE robot(s) total (${EBO_SE_DIR})"
 
 stopping=0
 term() {
@@ -282,24 +314,17 @@ run_robot() {
   done
 }
 
-# Supervise ONE EBO SE robot (native TUTK bridge via ebo_se_bridge.py). `sidx` is the SE's index
-# within se_robots; its global index continues after the cloud robots so RTSP/WebRTC ports don't
-# collide (8554+gidx → WebRTC 8189+gidx; only the first 4 global robots get a host-mapped WebRTC
-# port, so a 5th+ robot still has panel preview via HLS/snapshot but not the fluid drive view).
+# Supervise ONE EBO SE robot (native TUTK bridge via ebo_se_bridge.py). The caller has already
+# exported this robot's EBO_SE_* credentials; here we just pin its node/RTSP path+port and restart it
+# on exit. `n` is a 1-based ordinal (node name), `gidx` the global robot index: RTSP 8554+gidx →
+# WebRTC 8189+gidx. Only the first 4 global robots get a host-mapped WebRTC port; a 5th+ still has
+# panel preview via HLS/snapshot, just not the fluid drive view.
 run_se_robot() {
-  local sidx="$1" gidx="$2"
-  local base=".se_robots[$sidx]"
-  export EBO_SE_NODE="ebo_se_$((sidx + 1))"
-  export EBO_SE_NAME="$(jq -r "${base}.name // \"EBO SE $((sidx + 1))\"" "$OPTS")"
-  export EBO_SE_UID="$(jq -r "${base}.uid // empty" "$OPTS")"
-  export EBO_SE_AUTHKEY="$(jq -r "${base}.authkey // empty" "$OPTS")"
-  export EBO_SE_IDENTITY="$(jq -r "${base}.identity // empty" "$OPTS")"
-  export EBO_SE_TOKEN="$(jq -r "${base}.token // empty" "$OPTS")"
-  export EBO_SE_LICENSE="$(jq -r "${base}.license // empty" "$OPTS")"
-  export EBO_SE_SN="$(jq -r "${base}.sn // empty" "$OPTS")"
-  export EBO_SE_MAC="$(jq -r "${base}.mac // empty" "$OPTS")"
-  export EBO_SE_RTSP_PATH="ebo_se_$((sidx + 1))"
-  export EBO_RTSP_PORT="$((8554 + gidx))"
+  local n="$1" gidx="$2"
+  export EBO_SE_NODE="ebo_se_${n}" EBO_SE_RTSP_PATH="ebo_se_${n}" EBO_RTSP_PORT="$((8554 + gidx))"
+  # license + authkey are app constants (same for every SE); the per-robot vars are set by the caller.
+  export EBO_SE_LICENSE="${EBO_SE_LICENSE:-$EBO_SE_LICENSE_CONST}"
+  export EBO_SE_AUTHKEY="${EBO_SE_AUTHKEY:-$EBO_SE_AUTHKEY_CONST}"
   while [ "$stopping" -eq 0 ]; do
     ( exec python /app/ebo_se_bridge.py ) &
     local rc=0
@@ -308,6 +333,31 @@ run_se_robot() {
     echo "[add-on] EBO SE (${EBO_SE_NODE}) exited (rc=${rc}), restarting in 15s…"
     sleep 15 & wait $! || true
   done
+}
+
+# Feeder: a MANUAL se_robots[sidx] entry -> export its creds, then supervise.
+run_se_manual() {
+  local sidx="$1" gidx="$2" n=$(( sidx + 1 )) base=".se_robots[$sidx]"
+  EBO_SE_NAME="$(jq -r "${base}.name // \"EBO SE ${n}\"" "$OPTS")" \
+  EBO_SE_UID="$(jq -r "${base}.uid // empty" "$OPTS")" \
+  EBO_SE_IDENTITY="$(jq -r "${base}.identity // empty" "$OPTS")" \
+  EBO_SE_TOKEN="$(jq -r "${base}.token // empty" "$OPTS")" \
+  EBO_SE_SN="$(jq -r "${base}.sn // empty" "$OPTS")" \
+  EBO_SE_MAC="$(jq -r "${base}.mac // empty" "$OPTS")" \
+  EBO_SE_LICENSE="$(jq -r "${base}.license // empty" "$OPTS")" \
+  EBO_SE_AUTHKEY="$(jq -r "${base}.authkey // empty" "$OPTS")" \
+  EBO_SE_IOCTL9930_B64="" \
+    run_se_robot "$n" "$gidx"
+}
+
+# Feeder: a CLOUD-discovered TSV line -> export its creds (incl. the freshly generated ioctl blob),
+# then supervise. Fields: SE id name uid identity token sn model ioctl9930_b64
+run_se_cloud() {
+  local n="$1" gidx="$2"; shift 2
+  local id="$1" name="$2" uid="$3" identity="$4" token="$5" sn="$6" model="$7" ioctl="$8"
+  EBO_SE_NAME="$name" EBO_SE_UID="$uid" EBO_SE_IDENTITY="$identity" EBO_SE_TOKEN="$token" \
+  EBO_SE_SN="$sn" EBO_SE_IOCTL9930_B64="$ioctl" \
+    run_se_robot "$n" "$gidx"
 }
 
 # Ingress web panel (one for the whole add-on): aggregates every robot's state over MQTT.
@@ -332,12 +382,23 @@ fi
 for i in "${!RIDS[@]}"; do
   run_robot "${RIDS[$i]}" "$i" "${RNAMES[$i]}" &
 done
-# EBO SE robots: global index continues after the cloud robots (NR) so ports stay unique.
-if [ "$NSE" -gt 0 ]; then
-  s=0
-  while [ "$s" -lt "$NSE" ]; do
-    run_se_robot "$s" "$(( NR + s ))" &
-    s=$(( s + 1 ))
-  done
+# EBO SE robots: global index continues after the cloud robots (NR) so RTSP/WebRTC ports stay unique.
+# Node ordinals (ebo_se_N) are 1-based and continue across manual then cloud robots.
+SE_ORD=0
+# (a) manual se_robots entries
+s=0
+while [ "$s" -lt "$NSE_MANUAL" ]; do
+  SE_ORD=$(( SE_ORD + 1 ))
+  run_se_manual "$s" "$(( NR + SE_ORD - 1 ))" &
+  s=$(( s + 1 ))
+done
+# (b) cloud-discovered robots (one TSV line each)
+if [ "$NSE_CLOUD" -gt 0 ] && [ -s "$SE_DISCO" ]; then
+  while IFS=$'\t' read -r tag id name uid identity token sn model ioctl; do
+    [ "$tag" = "SE" ] || continue
+    SE_ORD=$(( SE_ORD + 1 ))
+    run_se_cloud "$SE_ORD" "$(( NR + SE_ORD - 1 ))" \
+      "$id" "$name" "$uid" "$identity" "$token" "$sn" "$model" "$ioctl" &
+  done < "$SE_DISCO"
 fi
 wait || true   # never let a crashing child kill the supervisor under `set -e`
