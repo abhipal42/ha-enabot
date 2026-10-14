@@ -415,13 +415,14 @@ class SEBridge:
     def _handle(self, leaf, payload):
         if leaf == "move/vector":
             d = json.loads(payload) if payload else {}
-            ly = max(-1.0, min(1.0, float(d.get("ly", 0)) / 100.0))
+            # negate ly: the panel's forward (up) is the opposite sign to what the SE expects.
+            ly = -max(-1.0, min(1.0, float(d.get("ly", 0)) / 100.0))
             rx = max(-1.0, min(1.0, float(d.get("rx", 0)) / 100.0))
             hold = float(d.get("hold", 0) or 0)
             self._set_drive(ly, rx, int(d.get("buttons", 0) or 0), hold)
         elif leaf == "joystick":
             d = json.loads(payload) if payload else {}
-            ly = max(-1.0, min(1.0, float(d.get("y", 0))))
+            ly = -max(-1.0, min(1.0, float(d.get("y", 0))))
             rx = max(-1.0, min(1.0, float(d.get("x", 0))))
             self._set_drive(ly, rx, 0, 0)
         elif leaf == "dock":
