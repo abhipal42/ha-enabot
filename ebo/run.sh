@@ -212,6 +212,18 @@ if [ "$NR" -eq 0 ]; then
 fi
 [ "$NR" -gt 1 ] && echo "[add-on] ${NR} robots on the account — running one bridge each"
 
+# --- EBO SE robots (LAN / TUTK) listed in the add-on config ---
+# These are LOCAL robots (not on the Enabot cloud account), each described by the credentials you
+# extracted from your own robot (see docs/EBO-SE.md). Their native bridge + TUTK/bionic runtime live
+# in the config dir pointed to by `se_dir` (default /share/ebo-se) and are NOT shipped in the image.
+export EBO_SE_DIR="$(pget se_dir /share/ebo-se)"
+NSE="$(jq -r '(.se_robots // []) | length' "$OPTS" 2>/dev/null || echo 0)"
+case "$NSE" in ''|*[!0-9]*) NSE=0;; esac
+# total robot count decides whether EVERY robot needs a distinct node/RTSP port (even one cloud
+# robot must move off the default path once an SE shares the broker).
+TOTAL=$(( NR + NSE ))
+[ "$NSE" -gt 0 ] && echo "[add-on] ${NSE} EBO SE robot(s) configured (dir: ${EBO_SE_DIR})"
+
 stopping=0
 term() {
   stopping=1
@@ -219,8 +231,9 @@ term() {
   pkill -TERM -f '/app/panel.py' 2>/dev/null || true
   pkill -TERM -f '/app/ebo_mcp.py' 2>/dev/null || true
   pkill -TERM -f '/app/ebo_bridge.py' 2>/dev/null || true
+  pkill -TERM -f '/app/ebo_se_bridge.py' 2>/dev/null || true
   for _ in $(seq 1 16); do
-    pgrep -f '/app/ebo_bridge.py' >/dev/null 2>&1 || break
+    pgrep -f '/app/ebo_bridge.py' >/dev/null 2>&1 || pgrep -f '/app/ebo_se_bridge.py' >/dev/null 2>&1 || break
     sleep 0.5
   done
   exit 0
@@ -237,7 +250,7 @@ run_robot() {
       export EBO_VIDEO="$v" EBO_AUDIO="$a"
       [ -n "$id" ] && export EBO_ROBOT_ID="$id"
       export EBO_DEVICE_NAME="$name"    # always use the robot's real (account) name
-      if [ "$NR" -gt 1 ]; then          # distinct node/port/path only when there's more than one
+      if [ "$TOTAL" -gt 1 ]; then       # distinct node/port/path once more than one robot shares the bus
         export EBO_NODE="ebo_${id}" EBO_RTSP_PATH="ebo_${id}" \
                EBO_RTSP_PORT="$((8554 + idx))"
       fi
@@ -269,6 +282,34 @@ run_robot() {
   done
 }
 
+# Supervise ONE EBO SE robot (native TUTK bridge via ebo_se_bridge.py). `sidx` is the SE's index
+# within se_robots; its global index continues after the cloud robots so RTSP/WebRTC ports don't
+# collide (8554+gidx → WebRTC 8189+gidx; only the first 4 global robots get a host-mapped WebRTC
+# port, so a 5th+ robot still has panel preview via HLS/snapshot but not the fluid drive view).
+run_se_robot() {
+  local sidx="$1" gidx="$2"
+  local base=".se_robots[$sidx]"
+  export EBO_SE_NODE="ebo_se_$((sidx + 1))"
+  export EBO_SE_NAME="$(jq -r "${base}.name // \"EBO SE $((sidx + 1))\"" "$OPTS")"
+  export EBO_SE_UID="$(jq -r "${base}.uid // empty" "$OPTS")"
+  export EBO_SE_AUTHKEY="$(jq -r "${base}.authkey // empty" "$OPTS")"
+  export EBO_SE_IDENTITY="$(jq -r "${base}.identity // empty" "$OPTS")"
+  export EBO_SE_TOKEN="$(jq -r "${base}.token // empty" "$OPTS")"
+  export EBO_SE_LICENSE="$(jq -r "${base}.license // empty" "$OPTS")"
+  export EBO_SE_SN="$(jq -r "${base}.sn // empty" "$OPTS")"
+  export EBO_SE_MAC="$(jq -r "${base}.mac // empty" "$OPTS")"
+  export EBO_SE_RTSP_PATH="ebo_se_$((sidx + 1))"
+  export EBO_RTSP_PORT="$((8554 + gidx))"
+  while [ "$stopping" -eq 0 ]; do
+    ( exec python /app/ebo_se_bridge.py ) &
+    local rc=0
+    wait $! || rc=$?
+    [ "$stopping" -eq 1 ] && break
+    echo "[add-on] EBO SE (${EBO_SE_NODE}) exited (rc=${rc}), restarting in 15s…"
+    sleep 15 & wait $! || true
+  done
+}
+
 # Ingress web panel (one for the whole add-on): aggregates every robot's state over MQTT.
 export EBO_PANEL_PORT="${EBO_PANEL_PORT:-8099}"
 python /app/panel.py &
@@ -291,4 +332,12 @@ fi
 for i in "${!RIDS[@]}"; do
   run_robot "${RIDS[$i]}" "$i" "${RNAMES[$i]}" &
 done
+# EBO SE robots: global index continues after the cloud robots (NR) so ports stay unique.
+if [ "$NSE" -gt 0 ]; then
+  s=0
+  while [ "$s" -lt "$NSE" ]; do
+    run_se_robot "$s" "$(( NR + s ))" &
+    s=$(( s + 1 ))
+  done
+fi
 wait || true   # never let a crashing child kill the supervisor under `set -e`

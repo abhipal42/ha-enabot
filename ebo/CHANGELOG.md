@@ -1,5 +1,18 @@
 # Changelog — Enabot integration
 
+## 0.27.0 — EBO SE (LAN / TUTK) support
+- **The EBO SE now works in this add-on**, alongside the cloud robots, on a Raspberry Pi 4/5.
+  It speaks ThroughTek TUTK/Kalay on your LAN (not the Enabot cloud), so it needs the TUTK
+  libraries, the Android bionic runtime and the per-robot credentials from your own robot — you
+  drop those into a config dir (`se_dir`, default `/share/ebo-se`) and list the robot(s) under the
+  new `se_robots` option. Nothing proprietary is shipped. Full guide: `docs/EBO-SE.md`.
+- New `ebo_se_bridge.py`: runs the native SE bridge and speaks the add-on's internal MQTT, so the
+  **panel, the companion HA integration and the MCP server all work unchanged** (live camera,
+  joystick/driving, dock, wake/sleep, eyes, night vision, collision avoidance, battery).
+- New `se/ebo_bridge.c` (vendored from lilium360's MIT project, with credit) + `se/build_bridge.sh`
+  to build a **64-bit (arm64) binary for the Pi 5** — upstream ships only 32-bit.
+- Not available on the SE: laser, talk/say, per-robot volume (those commands are ignored).
+
 ## 0.26.107 — a ready-made key extractor for current app builds
 - **New `tools/extract_keys.js`** (Frida) reads the two app keys from *your own* running EBO HOME app
   at runtime and prints them. On current builds the keys are deobfuscated inside `libeboSignature.so`

@@ -69,7 +69,7 @@ for each.
 | family | models | how |
 |--------|--------|-----|
 | **Cloud (this add-on)** | EBO **Air 2** ✅, Air 2 Plus / Air 2S / Mini 🧪, **EBO X / Max** 🧪 | EBO HOME app + Enabot Agora cloud. All robots on your account are discovered automatically; non-Air 2 are experimental. |
-| **EBO SE (LAN)** | EBO SE | Different, local-only stack (TUTK/Kalay) — **not** this add-on. Use [ebo-se-lan-bridge](https://github.com/lilium360/ebo-se-lan-bridge) by **lilium360** (Raspberry Pi); it coexists with this add-on. |
+| **EBO SE (LAN)** | EBO SE 🧪 | Different, local-only stack (TUTK/Kalay) — now supported **in this add-on** on a Raspberry Pi 4/5, built on [lilium360's](https://github.com/lilium360/ebo-se-lan-bridge) protocol work. You supply the TUTK libraries + credentials from your own robot (nothing proprietary is shipped). Setup: [docs/EBO-SE.md](ebo/docs/EBO-SE.md). |
 
 ## Install
 
