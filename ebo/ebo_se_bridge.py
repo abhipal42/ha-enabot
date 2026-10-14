@@ -279,6 +279,11 @@ class SEBridge:
                 log("[se] could not write generated ioctl9930:", e)
         env["EBO_IOCTL9930"] = ioctl_path
         env["LD_LIBRARY_PATH"] = os.path.join(SE_DIR, "bionic") + ":" + os.path.join(SE_DIR, "lib")
+        # Android libc resolves DNS via netd/system-properties by default, which don't exist in this
+        # container — so TUTK's master-server lookup fails with IOTC_ER_FAIL_RESOLVE_HOSTNAME (-2).
+        # ANDROID_DNS_MODE=local tells bionic to read /etc/resolv.conf instead (the container's
+        # working resolver), which is the standard fix for running Android binaries on Linux.
+        env["ANDROID_DNS_MODE"] = "local"
         # the native bridge reads credentials from these (its own env names)
         env["EBO_UID"], env["EBO_AUTHKEY"] = UID, AUTHKEY
         env["EBO_IDENTITY"], env["EBO_TOKEN"], env["EBO_LICENSE"] = IDENTITY, TOKEN, LICENSE
