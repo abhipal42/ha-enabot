@@ -1,99 +1,72 @@
 /*
- * extract_keys_rola.js — read YOUR OWN ROLA app's EBO SE keys at runtime, with Frida.
+ * extract_keys_rola.js — read YOUR OWN ROLA app's EBO SE signing keys at runtime, with Frida.
  *
- * Prints the five values the add-on's `se_cloud` discovery needs, straight from your own running
- * app on your own phone. Nothing is shipped and nothing leaves your device — this just reads values
- * the app already holds, the same way tools/extract_keys.js does for the EBO HOME app.
+ * READ-ONLY: this does not hook or modify anything — it just reads three static string fields the
+ * app's native loader fills in after you log in. (An earlier version hooked the native TUTK methods
+ * and that crashed the app on spawn, so this version only polls fields and you ATTACH after login.)
  *
- *   add-on config field   source in the ROLA app                 what for
- *   ------------------------------------------------------------------------------------------
- *   se_body_key           SignatureHelper.bodyEncryptKeyS2        encrypt the login body (AES-GCM)
- *   se_sign_key           SignatureHelper.accessKeySecretS2       sign requests (HMAC-SHA1)
- *   se_uat_key            SignatureHelper.userAuthTokenKey        stream-start token (AES-CFB)
- *   se_license            TUTK_SDK_Set_License_Key(arg)           TUTK license (constant)
- *   se_authkey            St_IOTCConnectInput.authKey             TUTK connect authKey (constant)
+ *   add-on config field   source in the ROLA app
+ *   ----------------------------------------------------------------
+ *   se_body_key           SignatureHelper.bodyEncryptKeyS2   (AES-GCM login body)
+ *   se_sign_key           SignatureHelper.accessKeySecretS2  (HMAC-SHA1 request sign)
+ *   se_uat_key            SignatureHelper.userAuthTokenKey   (AES-CFB stream-start token)
  *
- * The first three are filled by the native loader (libeboSignature.so) after login; the last two
- * are read live when the app connects to your robot. So: start the script, LOG IN, then OPEN your
- * EBO SE in the app — each value prints once as the app uses it.
+ * The two TUTK constants se_license / se_authkey are NOT here (they are plain string literals in
+ * the app, read them from jadx — see tools/README.md).
  *
- * USAGE (needs a rooted device/emulator + Frida server; see tools/README.md):
- *     frida -U -f com.enabot.ebo.intl -l extract_keys_rola.js        # spawn, then log in + open SE
- *     frida -U -n ROLA -l extract_keys_rola.js                        # or attach to the running app
+ * USAGE — ATTACH AFTER LOGIN (do not spawn):
+ *   1) open ROLA in the emulator, LOG IN, and open your EBO SE (this makes the loader fill the keys)
+ *   2) with ROLA in the foreground, attach:
+ *        frida -U -F -l extract_keys_rola.js
+ *      (or by name:  frida -U -n ROLA -l extract_keys_rola.js )
  *
- * Do NOT share the printed values — they are Enabot's app-level constants, the same reason this
- * project never ships them. Paste them into the add-on's Configuration tab only.
+ * Reads from YOUR OWN running app; nothing is shipped or sent anywhere. Don't share the values —
+ * paste them into the add-on's Configuration tab only.
  */
 'use strict';
 
+var WANT = {
+  bodyEncryptKeyS2:  'se_body_key',
+  accessKeySecretS2: 'se_sign_key',
+  userAuthTokenKey:  'se_uat_key'
+};
 var seen = {};
 
-function show(field, value, where) {
-  if (value === null || value === undefined) return;
-  var v = '' + value;
-  if (!v.length || seen[field] === v) return;
-  seen[field] = v;
-  console.log('');
-  console.log('  ==========================================================');
-  console.log('  FOUND  ' + field + ' = "' + v + '"   (length ' + v.length + ')');
-  console.log('         source: ' + where);
-  console.log('  ==========================================================');
-  console.log('');
+function tryRead() {
+  var S;
+  try { S = Java.use('com.enabot.lib.signature.SignatureHelper'); }
+  catch (e) { return false; }           // class not loaded yet — keep polling
+  var all = true;
+  Object.keys(WANT).forEach(function (f) {
+    if (seen[f]) return;
+    var v = '';
+    try { var h = S[f]; if (h && h.value !== undefined && h.value !== null) v = '' + h.value; } catch (e) {}
+    if (v.length) {
+      seen[f] = true;
+      console.log('');
+      console.log('  ========================================================');
+      console.log('  ' + WANT[f] + '  =  "' + v + '"   (' + v.length + ' chars)');
+      console.log('         [' + f + ']');
+      console.log('  ========================================================');
+    } else {
+      all = false;
+    }
+  });
+  return all;
 }
 
 Java.perform(function () {
-  // 1) the three SignatureHelper keys (static fields filled by the native loader after login)
-  var WANT = ['bodyEncryptKeyS2', 'accessKeySecretS2', 'userAuthTokenKey'];
-  function readSig(where) {
-    try {
-      var S = Java.use('com.enabot.lib.signature.SignatureHelper');
-      WANT.forEach(function (f) {
-        try { var h = S[f]; if (h && h.value !== undefined) show(f, h.value, where); } catch (e) {}
-      });
-    } catch (e) {}
-  }
-  readSig('SignatureHelper (at start)');
-  // re-read right after the loader runs (values appear late, once you log in)
-  try {
-    var S = Java.use('com.enabot.lib.signature.SignatureHelper');
-    ['loadSingleResources', 'loadSignatureResources', 'updateSignature'].forEach(function (m) {
-      if (!S[m]) return;
-      S[m].overloads.forEach(function (ov) {
-        ov.implementation = function () {
-          var r = ov.apply(this, arguments);
-          readSig('SignatureHelper.' + m + '()');
-          return r;
-        };
-      });
-    });
-  } catch (e) { console.log('[!] SignatureHelper not loaded yet — log in to trigger it'); }
-
-  // 2) se_license — the argument to TUTK_SDK_Set_License_Key(String)
-  try {
-    var G = Java.use('com.tutk.IOTC.TUTKGlobalAPIs');
-    G.TUTK_SDK_Set_License_Key.overloads.forEach(function (ov) {
-      ov.implementation = function (lic) {
-        show('se_license (TUTK license)', lic, 'TUTK_SDK_Set_License_Key()');
-        return ov.apply(this, arguments);
-      };
-    });
-  } catch (e) {}
-
-  // 3) se_authkey — St_IOTCConnectInput.authKey passed to IOTC_Connect_ByUIDEx(uid, slot, input)
-  try {
-    var I = Java.use('com.tutk.IOTC.IOTCAPIs');
-    I.IOTC_Connect_ByUIDEx.overloads.forEach(function (ov) {
-      ov.implementation = function () {
-        try {
-          var input = arguments[2];
-          if (input && input.authKey && input.authKey.value) {
-            show('se_authkey (TUTK authKey)', input.authKey.value, 'IOTC_Connect_ByUIDEx()');
-          }
-        } catch (e) {}
-        return ov.apply(this, arguments);
-      };
-    });
-  } catch (e) {}
-
-  console.log('[*] ready — now LOG IN in the app, then OPEN your EBO SE. Values print as they appear.');
+  console.log('[*] attached. Reading SignatureHelper keys — if blank, LOG IN + open your EBO SE now.');
+  var n = 0;
+  var timer = setInterval(function () {
+    n++;
+    var done = tryRead();
+    if (done) {
+      console.log('\n[*] all three keys found. Paste them into the add-on config, then press Ctrl-D / quit.');
+      clearInterval(timer);
+    } else if (n >= 120) {              // ~3 minutes
+      console.log('\n[!] gave up after 3 min. Make sure you logged in; then re-attach and try again.');
+      clearInterval(timer);
+    }
+  }, 1500);
 });
