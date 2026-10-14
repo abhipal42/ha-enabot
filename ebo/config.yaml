@@ -1,5 +1,5 @@
 name: EBO for Home Assistant (unofficial)
-version: "0.26.107"
+version: "0.27.0"
 slug: ebo
 description: Unofficial, free community add-on to manage Enabot EBO robots in Home Assistant (panel, camera, entities). Not affiliated with Enabot.
 url: https://github.com/abhipal42/ha-enabot
@@ -47,6 +47,9 @@ hassio_api: true
 # into /homeassistant/custom_components/ebo (no HACS needed). Only that folder is touched.
 map:
   - homeassistant_config:rw
+  # Read the EBO SE vendor files + native bridge you drop in /share/ebo-se (see docs/EBO-SE.md).
+  # Only needed for EBO SE (LAN) robots; cloud robots don't use it.
+  - share:rw
 # manager role: the panel can restart the add-on (after pairing a new robot) and read add-on info.
 hassio_role: manager
 # Sidebar web panel (Zigbee2MQTT-style): manage all robots from one place. Served via Ingress.
@@ -91,6 +94,12 @@ options:
   # the server only starts when this is on, so it costs nothing if you don't use it.
   mcp: false
   log_level: info
+  # --- EBO SE (LAN / TUTK) robots ---
+  # The EBO SE is NOT a cloud robot: it speaks ThroughTek TUTK/Kalay on your LAN. Leave se_robots
+  # empty unless you own one. For each SE, drop its native bridge + TUTK/bionic runtime into se_dir
+  # and fill in the credentials you extracted from your own robot. Full guide: docs/EBO-SE.md.
+  se_dir: /share/ebo-se
+  se_robots: []
 schema:
   email: str
   password: password
@@ -119,3 +128,14 @@ schema:
   # token the companion integration uses to read this add-on's data API. Auto-generated if empty;
   # persisted here so the integration can read it via the Supervisor. You don't need to set it.
   api_token: str?
+  # --- EBO SE (LAN / TUTK) robots ---
+  se_dir: str?
+  se_robots:
+    - name: str?
+      uid: str
+      authkey: password
+      identity: password
+      token: password
+      license: password
+      sn: str?
+      mac: str?

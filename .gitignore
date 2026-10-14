@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 .env
 secrets.env
+.DS_Store
+# EBO SE: built native binary is an artifact; build it with se/build_bridge.sh
+ebo/se/ebo_bridge
