@@ -1,5 +1,12 @@
 # Changelog — Enabot integration
 
+## 0.28.4 — EBO SE: fix discovery count + add discovery diagnostics
+- Fix a shell bug where an empty discovery result produced a malformed `NSE_CLOUD` (`grep -c … ||
+  echo 0` printed `0` twice), causing `integer expression` errors.
+- Cloud discovery now logs secret-free diagnostics (HTTP status, response `code`, the robot-list
+  shape + entry key names, and why a robot was skipped) to the add-on log, to pin down why a robot
+  isn't discovered.
+
 ## 0.28.3 — allow an EBO-SE-only setup (cloud account optional)
 - The add-on no longer errors out when the cloud account (`email`/`password` + `payload_key`/
   `sign_key`, for EBO HOME / Air 2) is unset. If an EBO SE is configured (`se_cloud` or `se_robots`),

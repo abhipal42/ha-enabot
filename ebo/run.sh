@@ -288,11 +288,16 @@ NSE_CLOUD=0
 if [ "$(pget se_cloud false)" = "true" ] && [ -n "$EBO_SE_EMAIL" ] && [ -n "$EBO_SE_PASSWORD" ]; then
   echo "[add-on] EBO SE: discovering robots via the ROLA cloud…"
   if python /app/ebo_se_cloud.py --emit > "$SE_DISCO" 2>/data/se_discover.log; then
-    NSE_CLOUD="$(grep -c . "$SE_DISCO" 2>/dev/null || echo 0)"
+    NSE_CLOUD="$(grep -c . "$SE_DISCO" 2>/dev/null)"
+    case "$NSE_CLOUD" in ''|*[!0-9]*) NSE_CLOUD=0;; esac
     echo "[add-on] EBO SE: discovered ${NSE_CLOUD} robot(s) from the cloud"
   else
-    echo "[add-on] EBO SE: cloud discovery failed (see /data/se_discover.log) — check email/password + app keys"
+    echo "[add-on] EBO SE: cloud discovery failed — check email/password + app keys"
     : > "$SE_DISCO"
+  fi
+  # surface the (secret-free) discovery diagnostics into the add-on log so issues are visible here.
+  if [ -s /data/se_discover.log ]; then
+    sed 's/^/[se-disco] /' /data/se_discover.log | tail -25
   fi
 fi
 

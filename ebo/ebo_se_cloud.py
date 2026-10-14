@@ -61,6 +61,13 @@ class CloudError(RuntimeError):
     pass
 
 
+def _diag(*a):
+    """Structural diagnostics to stderr (run.sh surfaces these to the add-on log). NEVER prints
+    secret values — only shapes, counts, key names, HTTP codes."""
+    import sys
+    sys.stderr.write("[diag] " + " ".join(str(x) for x in a) + "\n")
+
+
 def _nonce(n=11):
     return "".join(secrets.choice(_ALNUM) for _ in range(n))
 
@@ -101,6 +108,25 @@ class RolaCloud:
         self._opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.jar))
 
     # ---- transport ----
+    def _open(self, req, label):
+        try:
+            with self._opener.open(req, timeout=20) as r:  # nosec B310 - https, literal BASE host
+                raw = r.read().decode("utf-8", "replace")
+                _diag(label, "HTTP", r.status)
+                try:
+                    return json.loads(raw or "{}")
+                except ValueError:
+                    _diag(label, "non-JSON body len", len(raw))
+                    return {}
+        except urllib.error.HTTPError as e:
+            body = ""
+            try:
+                body = e.read().decode("utf-8", "replace")[:200]
+            except Exception:
+                pass
+            _diag(label, "HTTPError", e.code, "body~", body)
+            raise CloudError("%s HTTP %s" % (label, e.code))
+
     def _post(self, path, tree):
         tree = dict(tree)
         tree["sign"] = _sign("POST", path, tree)
@@ -108,14 +134,12 @@ class RolaCloud:
         req = urllib.request.Request(BASE + path, data=body, method="POST",
                                      headers={"Content-Type": "application/json; charset=utf-8",
                                               "Accept-Language": LANG})
-        with self._opener.open(req, timeout=20) as r:  # nosec B310 - https, literal BASE host
-            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+        return self._open(req, "POST " + path)
 
     def _get(self, path):
         req = urllib.request.Request(BASE + path, method="GET",
                                      headers={"Accept-Language": LANG})
-        with self._opener.open(req, timeout=20) as r:  # nosec B310 - https, literal BASE host
-            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+        return self._open(req, "GET " + path)
 
     # ---- flow ----
     def login(self):
@@ -130,6 +154,8 @@ class RolaCloud:
             "signature_version": "1.1", "signature_method": "SHA1",
         }
         resp = self._post("/api/v1/s1/users/login/", tree)
+        cookies = [c.name for c in self.jar]
+        _diag("login: resp code=", resp.get("code"), "resp keys=", list(resp.keys()), "cookies=", cookies)
         # the session is the sessionid cookie (set in the response headers). The body is encrypted,
         # but we don't need it — a set cookie means success. user_id comes from the robot list.
         if not any(c.name == "sessionid" for c in self.jar):
@@ -141,7 +167,12 @@ class RolaCloud:
         """Return the raw robot list (plaintext JSON 'data' array)."""
         resp = self._get("/api/v1/robots/robot/")
         data = resp.get("data")
+        _diag("robots: resp code=", resp.get("code"), "resp keys=", list(resp.keys()),
+              "data type=", type(data).__name__,
+              "data keys=", (list(data.keys()) if isinstance(data, dict) else "n/a"))
         robots = data if isinstance(data, list) else (data or {}).get("robots") or []
+        _diag("robots: count=", len(robots),
+              "first-entry keys=", (list(robots[0].keys()) if robots else "none"))
         if robots and self.user_id is None:
             # the list carries the robot_user_id / user id used for user_auth_token
             self.user_id = (robots[0].get("robot_user_id")
@@ -187,12 +218,16 @@ def discover(email, password):
     c = RolaCloud(email, password)
     c.login()
     out = []
+    _skipped = 0
     for r in c.robots():
         rid = r.get("robot_id") or r.get("id")
         uid = r.get("tutk_uid")
         identity = r.get("tutk_token_identity")
         token = r.get("tutk_token_value")
         if not (uid and identity and token and rid is not None):
+            _skipped += 1
+            _diag("skip robot id=", rid, "has uid=", bool(uid), "identity=", bool(identity),
+                  "token=", bool(token), "| keys=", list(r.keys()))
             continue  # not a TUTK/SE robot (e.g. a cloud Air 2 on the same account)
         try:
             uat = c.user_auth_token(rid)
