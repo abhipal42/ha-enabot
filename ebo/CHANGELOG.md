@@ -1,11 +1,17 @@
 # Changelog — Enabot integration
 
-## 0.28.4 — EBO SE: fix discovery count + add discovery diagnostics
+## 0.28.4 — EBO SE: get cloud discovery actually working
+- **Discovery now works end to end** (verified against a live account): login → robot list →
+  per-robot stream-start token. Fixes found while testing:
+  - The robot list wraps each robot in a binding object; read the TUTK fields (`tutk_uid`,
+    `tutk_token_identity`, `tutk_token_value`, `robot_id`, name) from the nested `robot` object.
+  - ROLA uses **two** HMAC sign keys: `accessKeySecretS2` signs the login, `accessKeySecret` signs
+    the other requests (e.g. `user_auth_token`). Added `se_sign_key_v1` (= `accessKeySecret`);
+    without it the token call returned `error sign` and no stream-start blob was generated.
 - Fix a shell bug where an empty discovery result produced a malformed `NSE_CLOUD` (`grep -c … ||
   echo 0` printed `0` twice), causing `integer expression` errors.
-- Cloud discovery now logs secret-free diagnostics (HTTP status, response `code`, the robot-list
-  shape + entry key names, and why a robot was skipped) to the add-on log, to pin down why a robot
-  isn't discovered.
+- Cloud discovery logs secret-free diagnostics (HTTP status, response `code`, list shape, entry key
+  names, skip reasons) to the add-on log to pin down any discovery issue.
 
 ## 0.28.3 — allow an EBO-SE-only setup (cloud account optional)
 - The add-on no longer errors out when the cloud account (`email`/`password` + `payload_key`/

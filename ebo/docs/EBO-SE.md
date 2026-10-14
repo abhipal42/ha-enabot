@@ -111,7 +111,8 @@ ROLA field names:
 | Config field | ROLA app field (`SignatureHelper`) | used for |
 |---|---|---|
 | `se_body_key` | `bodyEncryptKeyS2` | encrypt the login body (AES-GCM) |
-| `se_sign_key` | `accessKeySecretS2` | sign requests (HMAC-SHA1) |
+| `se_sign_key` | `accessKeySecretS2` | sign the login (HMAC-SHA1) |
+| `se_sign_key_v1` | `accessKeySecret` | sign the other requests, e.g. the stream token (HMAC-SHA1) |
 | `se_uat_key`  | `userAuthTokenKey` | the stream-start token (AES-CFB) |
 | `se_license`  | `TUTK_SDK_Set_License_Key` arg | TUTK license (app constant) |
 | `se_authkey`  | `St_IOTCConnectInput.authKey` | TUTK connect authKey (app constant) |
@@ -122,6 +123,7 @@ se_email: "you@example.com"
 se_password: "your-rola-password"
 se_body_key: "................"
 se_sign_key: "................"
+se_sign_key_v1: "................"
 se_uat_key:  "................"
 se_license:  "................"
 se_authkey:  "........"
