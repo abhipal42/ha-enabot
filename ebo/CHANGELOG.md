@@ -1,5 +1,14 @@
 # Changelog — Enabot integration
 
+## 0.28.8 — EBO SE: fix driving
+
+- The robot wouldn't move from the panel. Two bugs: (1) the bridge forced the motor command's
+  `buttons` field to 1, but that field is a gamepad-button bitmask — the SE drives with buttons=0
+  (matches the reference bridge); a non-zero value isn't a motor enable. (2) each streamed move
+  command spawned its own hold-loop thread, so rapid panel joystick updates piled up overlapping
+  threads that fought each other. Replaced with a single motor-frame streamer (~15 Hz) that sends
+  the current vector until it expires (per-command hold, or ~0.5 s dead-man), then one stop.
+
 ## 0.28.7 — EBO SE: fix avClientStartEx on arm64 (-20000)
 - Quieter logs: the verbose `[se-disco]` diagnostics are now gated behind add-on log level =
   `debug` (or shown on discovery failure); silenced the harmless cryptography CFB deprecation warning.
