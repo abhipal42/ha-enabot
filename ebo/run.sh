@@ -434,6 +434,14 @@ fi
 for i in "${!RIDS[@]}"; do
   run_robot "${RIDS[$i]}" "$i" "${RNAMES[$i]}" &
 done
+# EBO SE DNS shim: the native (Android libc) resolver can't use the container's DNS, so start a
+# tiny forwarder on 127.0.0.1:53 that the bionic resolver falls back to (see ebo_se_dns.py). One
+# for the whole add-on; only when an SE is actually running.
+if [ "$NSE" -gt 0 ]; then
+  python /app/ebo_se_dns.py &
+  sleep 1
+fi
+
 # EBO SE robots: global index continues after the cloud robots (NR) so RTSP/WebRTC ports stay unique.
 # Node ordinals (ebo_se_N) are 1-based and continue across manual then cloud robots.
 SE_ORD=0
