@@ -293,10 +293,16 @@ class SEBridge:
         # the native bridge reads credentials from these (its own env names)
         env["EBO_UID"], env["EBO_AUTHKEY"] = UID, AUTHKEY
         env["EBO_IDENTITY"], env["EBO_TOKEN"], env["EBO_LICENSE"] = IDENTITY, TOKEN, LICENSE
+        # control pipe: inherit the read end at its own fd number and tell the bridge which fd it is
+        # (EBO_CTRL_FD). More robust than preexec dup2(->3), which depends on CPython's
+        # close-fds-vs-preexec ordering and was silently dropping our commands.
+        os.set_inheritable(self._ctrl_r, True)
+        env["EBO_CTRL_FD"] = str(self._ctrl_r)
+        if os.environ.get("EBO_SE_DEBUG") == "1" or os.environ.get("EBO_SE_NATIVE_DEBUG") == "1":
+            env["EBO_NATIVE_DEBUG"] = "1"
         argv = [linker, binary] if linker else [binary]
         self.proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     env=env, pass_fds=(self._ctrl_r,),
-                                     preexec_fn=lambda: os.dup2(self._ctrl_r, 3))
+                                     env=env, pass_fds=(self._ctrl_r,), close_fds=True)
         log("[se] native bridge pid", self.proc.pid)
         threading.Thread(target=self._log_stderr, daemon=True).start()
 

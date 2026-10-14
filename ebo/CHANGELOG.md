@@ -1,5 +1,14 @@
 # Changelog — Enabot integration
 
+## 0.28.9 — EBO SE: fix the control pipe (commands reached the bridge but not the robot)
+
+- Driving/controls did nothing even though the panel sent the commands and the Python write
+  succeeded. Cause: the native bridge received the control pipe via `preexec_fn` + `dup2(->fd 3)`,
+  which depends on CPython's close-fds-vs-preexec ordering and was silently dropping it — the native
+  side's fd 3 wasn't our pipe. Fix: pass the pipe read end inheritably and tell the bridge its fd
+  number via `EBO_CTRL_FD` (no dup2). The bridge logs the control fd + validity on connect.
+  Requires the refreshed bundle (new ebo_bridge) and an add-on update.
+
 ## 0.28.8 — EBO SE: fix driving
 
 - The robot wouldn't move from the panel. Two bugs: (1) the bridge forced the motor command's

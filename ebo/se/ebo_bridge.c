@@ -101,7 +101,12 @@ int main(void){
   if(rdt_init){ int ri=rdt_init(); fprintf(stderr,"[bridge] RDT_Initialize=%d (control %s)\n",ri, ri>=0?"ready":"failed"); }
   fprintf(stderr,"[bridge] init done\n");
 
-  int cfd=3; fcntl(cfd, F_SETFL, fcntl(cfd,F_GETFL,0)|O_NONBLOCK);   /* fd 3 = control input */
+  /* control input fd: EBO_CTRL_FD (the inherited pipe fd) if set, else fd 3 (legacy). Reading the
+   * fd by number is robust — it doesn't depend on the parent's preexec/close-fds ordering. */
+  const char *cfdenv=getenv("EBO_CTRL_FD"); int cfd = cfdenv ? atoi(cfdenv) : 3;
+  int cfl=fcntl(cfd,F_GETFL,0);
+  fprintf(stderr,"[bridge] control fd=%d flags=%d (%s)\n", cfd, cfl, cfl==-1?"INVALID":"ok");
+  fcntl(cfd, F_SETFL, (cfl==-1?0:cfl)|O_NONBLOCK);
   unsigned char cbuf[4096]; int cpos=0;
 
   for(;;){ /* (re)connect loop */
@@ -176,8 +181,12 @@ int main(void){
       if(r>0){ cpos+=r;
         while(cpos>=4){ unsigned clen=*(unsigned*)cbuf; if(clen>sizeof(cbuf)-4||cpos<4+(int)clen) break;
           if(clen>=1){ unsigned char kind=cbuf[4]; int wr=0;
-            if(kind==0 && rdt_write && rdtch>=0){ wr=rdt_write(rdtch, (const char*)(cbuf+5), clen-1); }
-            else if(kind==1 && clen>=3){ unsigned io=*(unsigned short*)(cbuf+5); wr=sendio(av, io, (const char*)(cbuf+7), clen-3); }
+            static int dbg=-1; if(dbg<0) dbg=getenv("EBO_NATIVE_DEBUG")?1:0;
+            if(kind==0 && rdt_write && rdtch>=0){ wr=rdt_write(rdtch, (const char*)(cbuf+5), clen-1);
+              if(dbg) fprintf(stderr,"[bridge] cmd kind=0 (RDT) msgid=%u len=%u rdt=%d -> write=%d\n",
+                              clen>=7?(unsigned)cbuf[10]:0, clen-1, rdtch, wr); }
+            else if(kind==1 && clen>=3){ unsigned io=*(unsigned short*)(cbuf+5); wr=sendio(av, io, (const char*)(cbuf+7), clen-3);
+              if(dbg) fprintf(stderr,"[bridge] cmd kind=1 (ioctl) io=0x%x len=%u -> send=%d\n", io, clen-3, wr); }
             else { fprintf(stderr,"[bridge] cmd kind=%d not handled (rdt=%d)\n",kind,rdtch); }
             if(wr<0) fprintf(stderr,"[bridge] send command err=%d\n",wr);
           }
