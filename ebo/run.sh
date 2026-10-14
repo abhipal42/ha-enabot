@@ -104,14 +104,25 @@ if [ ! -f "$PANEL_CFG" ]; then
     "$EBO_VIDEO_PRESET" > "$PANEL_CFG" 2>/dev/null || true
 fi
 
-if [ -z "$EBO_EMAIL" ] || [ -z "$EBO_PASSWORD" ]; then
-  echo "[add-on] ERROR: set email and password in the add-on configuration."
+# Cloud account (EBO HOME / Air 2 etc.) is optional: it's only needed to run cloud robots. An
+# EBO-SE-only setup (se_cloud or se_robots) is valid without it. Decide what's configured and only
+# hard-fail when NOTHING is.
+EBO_SKIP_CLOUD=0
+_SE_CLOUD_ON="$(jq -r '.se_cloud // false' "$OPTS" 2>/dev/null)"
+_SE_ROBOTS_N="$(jq -r '(.se_robots // []) | length' "$OPTS" 2>/dev/null || echo 0)"
+case "$_SE_ROBOTS_N" in ''|*[!0-9]*) _SE_ROBOTS_N=0;; esac
+_HAVE_SE=0; { [ "$_SE_CLOUD_ON" = "true" ] || [ "$_SE_ROBOTS_N" -gt 0 ]; } && _HAVE_SE=1
+_HAVE_CLOUD=1
+{ [ -z "$EBO_EMAIL" ] || [ -z "$EBO_PASSWORD" ] || [ -z "$EBO_PAYLOAD_KEY" ] || [ -z "$EBO_SIGN_KEY" ]; } && _HAVE_CLOUD=0
+if [ "$_HAVE_CLOUD" = "0" ] && [ "$_HAVE_SE" = "0" ]; then
+  echo "[add-on] ERROR: nothing configured. Either set the cloud account (email + password +"
+  echo "[add-on] payload_key + sign_key, for EBO HOME / Air 2 robots), or configure an EBO SE"
+  echo "[add-on] (se_cloud: true + ROLA email/password + app keys, or se_robots). See the docs."
   exit 1
 fi
-if [ -z "$EBO_PAYLOAD_KEY" ] || [ -z "$EBO_SIGN_KEY" ]; then
-  echo "[add-on] ERROR: the app crypto keys are not shipped with this add-on. Set 'payload_key'"
-  echo "[add-on] and 'sign_key' in the configuration (the values for the EBO HOME app)."
-  exit 1
+if [ "$_HAVE_CLOUD" = "0" ]; then
+  export EBO_SKIP_CLOUD=1
+  echo "[add-on] no cloud account configured — running EBO SE only (skipping cloud robots)."
 fi
 
 # --- internal MQTT bus: a mosquitto bound to localhost, private to this container ---
@@ -196,17 +207,20 @@ fi
 echo "[add-on] starting Enabot integration bridge (region ${EBO_REGION})"
 
 # --- which robot(s) to run: a specific robot_id, or discover every robot on the account ---
+# Skipped entirely for an EBO-SE-only setup (no cloud account configured).
 RIDS=(); RNAMES=()
-if [ -n "$EBO_ROBOT_ID" ]; then
-  RIDS=("$EBO_ROBOT_ID"); RNAMES=("EBO Air 2")
-else
-  DISC="$(EBO_DISCOVER=1 python /app/ebo_bridge.py 2>/dev/null)"
-  while IFS=$'\t' read -r tag id name; do
-    [ "$tag" = "ROBOT" ] && [ -n "$id" ] && { RIDS+=("$id"); RNAMES+=("$name"); }
-  done <<< "$DISC"
+if [ "${EBO_SKIP_CLOUD:-0}" != "1" ]; then
+  if [ -n "$EBO_ROBOT_ID" ]; then
+    RIDS=("$EBO_ROBOT_ID"); RNAMES=("EBO Air 2")
+  else
+    DISC="$(EBO_DISCOVER=1 python /app/ebo_bridge.py 2>/dev/null)"
+    while IFS=$'\t' read -r tag id name; do
+      [ "$tag" = "ROBOT" ] && [ -n "$id" ] && { RIDS+=("$id"); RNAMES+=("$name"); }
+    done <<< "$DISC"
+  fi
 fi
 NR=${#RIDS[@]}
-if [ "$NR" -eq 0 ]; then
+if [ "$NR" -eq 0 ] && [ "${EBO_SKIP_CLOUD:-0}" != "1" ]; then
   # discovery failed (network/creds): fall back to a single default bridge (picks 1st robot)
   RIDS=(""); RNAMES=("EBO Air 2"); NR=1
 fi
