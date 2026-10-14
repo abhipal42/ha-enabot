@@ -1,5 +1,13 @@
 # Changelog — Enabot integration
 
+## 0.28.5 — EBO SE: fix native-libc DNS (IOTC connect -2)
+
+- The native bridge initialized but IOTC connect failed with -2 (FAIL_RESOLVE_HOSTNAME): Android's
+  libc resolves DNS via netd/system-properties, which don't exist in the add-on container, so the
+  TUTK master-server lookup failed. Fix: set `ANDROID_DNS_MODE=local` for the native bridge (bionic
+  then reads `/etc/resolv.conf`), and include `libnetd_client.so` in the bionic bundle. Re-pull the
+  bundle (it now contains that lib) — see docs/EBO-SE.md.
+
 ## 0.28.4 — EBO SE: get cloud discovery actually working
 - **Discovery now works end to end** (verified against a live account): login → robot list →
   per-robot stream-start token. Fixes found while testing:

@@ -58,7 +58,8 @@ bridge is missing or you drop a newer bundle. (Accepted drop locations: `/config
 │   ├── libdl.so
 │   ├── libc++.so
 │   ├── liblog.so
-│   └── libstdc++.so
+│   ├── libstdc++.so
+│   └── libnetd_client.so   # needed for DNS from the Android libc (TUTK master-server lookup)
 └── ioctl9930.bin       # ONLY for manual mode (Option B) — cloud discovery generates it for you
 ```
 
