@@ -1,5 +1,14 @@
 # Changelog — Enabot integration
 
+## 0.28.6 — EBO SE: DNS forwarder so the native resolver works in-container
+
+- Even with ANDROID_DNS_MODE=local, this bionic libc has no DNS servers in the container (it reads
+  them from Android properties, which don't exist), so IOTC connect still failed with -2. Fix: run
+  a tiny UDP DNS forwarder on 127.0.0.1:53 (ebo_se_dns.py) that relays to the container's real
+  resolver — the bionic resolver falls back to 127.0.0.1 when it has no nameservers, so the TUTK
+  master-server lookup now resolves. Started automatically when an EBO SE is configured. No bundle
+  change needed.
+
 ## 0.28.5 — EBO SE: fix native-libc DNS (IOTC connect -2)
 
 - The native bridge initialized but IOTC connect failed with -2 (FAIL_RESOLVE_HOSTNAME): Android's
