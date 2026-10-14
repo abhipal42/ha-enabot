@@ -1,5 +1,10 @@
 # Changelog — Enabot integration
 
+## 0.28.3 — allow an EBO-SE-only setup (cloud account optional)
+- The add-on no longer errors out when the cloud account (`email`/`password` + `payload_key`/
+  `sign_key`, for EBO HOME / Air 2) is unset. If an EBO SE is configured (`se_cloud` or `se_robots`),
+  it runs SE-only and skips the cloud robots. It only hard-fails when *nothing* is configured.
+
 ## 0.28.2 — EBO SE: default the native stack to the config dir
 - `se_dir` now defaults to `<config>/ebo` (shown as `/config/ebo` in the File editor add-on) instead
   of `/share/ebo`, so you can drop the `ebo-se-share.tgz` bundle straight into the File editor's
