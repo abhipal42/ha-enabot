@@ -1,5 +1,16 @@
 # Changelog — Enabot integration
 
+## 0.28.0 — EBO SE cloud discovery (email + password)
+- **EBO SE setup now collapses to email + password + the app keys.** New `se_cloud` mode logs into
+  the ROLA cloud (`ebo_se_cloud.py`), pulls your robot list, and derives every per-robot TUTK value
+  **and a fresh stream-start token** automatically — no hand-extracting UID/identity/token per robot,
+  and no `ioctl9930.bin` capture. Manual `se_robots` still works for anyone who prefers it.
+- The app keys (`se_body_key`/`se_sign_key`/`se_uat_key`) and the TUTK constants (`se_license`/
+  `se_authkey`) are **user-supplied**, same posture as the cloud models — nothing proprietary is
+  shipped; they may be the same keys you already use for EBO HOME. See `docs/EBO-SE.md`.
+- The ROLA request scheme is reimplemented (AES-GCM login body, HMAC-SHA1 sign, cookie session,
+  AES-CFB stream-start token); keys are never embedded, only read from your config at runtime.
+
 ## 0.27.0 — EBO SE (LAN / TUTK) support
 - **The EBO SE now works in this add-on**, alongside the cloud robots, on a Raspberry Pi 4/5.
   It speaks ThroughTek TUTK/Kalay on your LAN (not the Enabot cloud), so it needs the TUTK

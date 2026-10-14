@@ -1,5 +1,5 @@
 name: EBO for Home Assistant (unofficial)
-version: "0.27.0"
+version: "0.28.0"
 slug: ebo
 description: Unofficial, free community add-on to manage Enabot EBO robots in Home Assistant (panel, camera, entities). Not affiliated with Enabot.
 url: https://github.com/abhipal42/ha-enabot
@@ -95,10 +95,24 @@ options:
   mcp: false
   log_level: info
   # --- EBO SE (LAN / TUTK) robots ---
-  # The EBO SE is NOT a cloud robot: it speaks ThroughTek TUTK/Kalay on your LAN. Leave se_robots
-  # empty unless you own one. For each SE, drop its native bridge + TUTK/bionic runtime into se_dir
-  # and fill in the credentials you extracted from your own robot. Full guide: docs/EBO-SE.md.
+  # The EBO SE speaks ThroughTek TUTK/Kalay on your LAN. Leave everything here empty unless you own
+  # one. Drop its native bridge + TUTK/bionic runtime into se_dir (see docs/EBO-SE.md). Then EITHER:
+  #   (a) set se_cloud: true + your ROLA email/password + the app keys below → the add-on discovers
+  #       each robot's TUTK credentials automatically (nothing to hand-extract per robot); OR
+  #   (b) list each robot's credentials manually under se_robots.
   se_dir: /share/ebo-se
+  # (a) cloud discovery — easiest. The app keys may be the SAME ones you use for EBO HOME.
+  se_cloud: false
+  se_email: ""
+  se_password: ""
+  se_body_key: ""        # ROLA bodyEncryptKeyS2 (AES-GCM, 16 chars)
+  se_sign_key: ""        # ROLA accessKeySecretS2 (HMAC-SHA1)
+  se_uat_key: ""         # ROLA userAuthTokenKey (AES-CFB, 16 chars)
+  se_license: ""         # TUTK license key (app constant)
+  se_authkey: ""         # TUTK connect authKey (app constant)
+  se_cloud_host: ebo.enabotserverintl.com
+  se_login_region: GB
+  # (b) manual list (only if you don't use cloud discovery)
   se_robots: []
 schema:
   email: str
@@ -130,6 +144,16 @@ schema:
   api_token: str?
   # --- EBO SE (LAN / TUTK) robots ---
   se_dir: str?
+  se_cloud: bool?
+  se_email: str?
+  se_password: password?
+  se_body_key: password?
+  se_sign_key: password?
+  se_uat_key: password?
+  se_license: password?
+  se_authkey: password?
+  se_cloud_host: str?
+  se_login_region: str?
   se_robots:
     - name: str?
       uid: str

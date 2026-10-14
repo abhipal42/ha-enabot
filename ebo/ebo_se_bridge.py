@@ -265,7 +265,19 @@ class SEBridge:
         binary = os.path.abspath(os.path.join(SE_DIR, "ebo_bridge"))
         env = dict(os.environ)
         env["EBO_LIB_DIR"] = os.path.join(SE_DIR, "lib")
-        env["EBO_IOCTL9930"] = os.path.join(SE_DIR, "ioctl9930.bin")
+        # stream-start blob: prefer a freshly generated one (cloud discovery passes it base64 in
+        # EBO_SE_IOCTL9930_B64), else fall back to a captured ioctl9930.bin in se_dir.
+        ioctl_path = os.path.join(SE_DIR, "ioctl9930.bin")
+        b64 = os.environ.get("EBO_SE_IOCTL9930_B64", "")
+        if b64:
+            try:
+                import base64 as _b64
+                ioctl_path = os.path.join(tempfile.gettempdir(), "ebo_se_ioctl_%s.bin" % NODE)
+                with open(ioctl_path, "wb") as _f:
+                    _f.write(_b64.b64decode(b64))
+            except Exception as e:
+                log("[se] could not write generated ioctl9930:", e)
+        env["EBO_IOCTL9930"] = ioctl_path
         env["LD_LIBRARY_PATH"] = os.path.join(SE_DIR, "bionic") + ":" + os.path.join(SE_DIR, "lib")
         # the native bridge reads credentials from these (its own env names)
         env["EBO_UID"], env["EBO_AUTHKEY"] = UID, AUTHKEY
