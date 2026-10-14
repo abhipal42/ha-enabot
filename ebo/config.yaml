@@ -1,5 +1,5 @@
 name: EBO for Home Assistant (unofficial)
-version: "0.28.1"
+version: "0.28.2"
 slug: ebo
 description: Unofficial, free community add-on to manage Enabot EBO robots in Home Assistant (panel, camera, entities). Not affiliated with Enabot.
 url: https://github.com/abhipal42/ha-enabot
@@ -96,11 +96,14 @@ options:
   log_level: info
   # --- EBO SE (LAN / TUTK) robots ---
   # The EBO SE speaks ThroughTek TUTK/Kalay on your LAN. Leave everything here empty unless you own
-  # one. Drop its native bridge + TUTK/bionic runtime into se_dir (see docs/EBO-SE.md). Then EITHER:
+  # one. Drop the native-stack bundle (ebo-se-share.tgz) into the File editor's /config root (see
+  # docs/EBO-SE.md); the add-on unpacks it on boot. Then EITHER:
   #   (a) set se_cloud: true + your ROLA email/password + the app keys below → the add-on discovers
   #       each robot's TUTK credentials automatically (nothing to hand-extract per robot); OR
   #   (b) list each robot's credentials manually under se_robots.
-  se_dir: /share/ebo
+  # se_dir: leave empty to use <config>/ebo (shown as /config/ebo in File editor); set to e.g.
+  # /share/ebo to use the share folder instead.
+  se_dir: ""
   # (a) cloud discovery — easiest. The app keys may be the SAME ones you use for EBO HOME.
   se_cloud: false
   se_email: ""
