@@ -1,5 +1,12 @@
 # Changelog — Enabot integration
 
+## 0.28.1 — EBO SE: auto-unpack the native stack
+- You no longer hand-place the SE's native files. Drop `ebo-se-share.tgz` (ebo_bridge + lib/ +
+  bionic/) into `/share` with the File editor add-on; on boot the add-on unpacks it into `se_dir`
+  and sets perms (re-extracting only when the bridge is missing or you drop a newer bundle).
+- Default `se_dir` is now `/share/ebo` (was `/share/ebo-se`). The TUTK libraries remain
+  user-supplied and are never shipped in the image.
+
 ## 0.28.0 — EBO SE cloud discovery (email + password)
 - **EBO SE setup now collapses to email + password + the app keys.** New `se_cloud` mode logs into
   the ROLA cloud (`ebo_se_cloud.py`), pulls your robot list, and derives every per-robot TUTK value

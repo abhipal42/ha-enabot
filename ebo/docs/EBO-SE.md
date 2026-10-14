@@ -27,13 +27,21 @@ commands is simply ignored by the SE bridge.
 - The robot and HA on the **same LAN**.
 - Only one client may stream from an SE at a time: **close the ROLA app** while the add-on is connected.
 
-## 1. Create the SE config directory
+## 1. Provide the native stack
 
-Default is `/share/ebo-se` (override with the `se_dir` option). Create it and populate it with the
-files below (e.g. over Samba, or the SSH/Terminal add-on):
+The SE's native bridge + TUTK/bionic runtime aren't shipped in the image (the TUTK libraries are
+proprietary). You provide them once; the add-on expects them under `se_dir` (default `/share/ebo`).
+
+**Easiest — drop the bundle and let the add-on unpack it.** Put a single `ebo-se-share.tgz`
+(containing `ebo_bridge`, `lib/`, `bionic/`) into `/share` using the **File editor** add-on. On the
+next start the add-on extracts it into `/share/ebo` and sets permissions — no SSH, `tar` or `chmod`.
+It re-extracts only when the bridge is missing or you drop a newer bundle. (Accepted locations:
+`/share/ebo-se-share.tgz`, `/share/ebo.tgz`, or `/share/ebo/ebo-se-share.tgz`.)
+
+**Or place the files yourself** — the expected layout under `se_dir`:
 
 ```
-/share/ebo-se/
+/share/ebo/
 ├── ebo_bridge          # the native bridge you build in step 2 (must match the .so bitness)
 ├── lib/                # the 4 TUTK .so files (see step 3)
 │   ├── libTUTKGlobalAPIs.so
@@ -65,7 +73,7 @@ NDK=/path/to/android-ndk ARCH=arm64 ./se/build_bridge.sh
 # -> ebo/se/ebo_bridge  (ELF 64-bit aarch64)
 ```
 
-Copy the result to `/share/ebo-se/ebo_bridge`. The binary's bitness must match the `lib/` and
+Copy the result to `/share/ebo/ebo_bridge`. The binary's bitness must match the `lib/` and
 `bionic/` files — 64-bit binary ⇒ 64-bit (`arm64-v8a`) `.so` files and the 64-bit `linker64`.
 
 ## 3. Get the TUTK libraries + runtime
@@ -106,7 +114,7 @@ ROLA field names:
 | `se_authkey`  | `St_IOTCConnectInput.authKey` | TUTK connect authKey (app constant) |
 
 ```yaml
-se_dir: /share/ebo-se
+se_dir: /share/ebo
 se_cloud: true
 se_email: "you@example.com"
 se_password: "your-rola-password"
@@ -128,7 +136,7 @@ If you'd rather not supply the cloud keys, extract the five TUTK values per robo
 lilium360's guide) and drop an `ioctl9930.bin` into `se_dir`:
 
 ```yaml
-se_dir: /share/ebo-se
+se_dir: /share/ebo
 se_robots:
   - name: "Living room EBO SE"
     uid: "XXXXXXXXXXXXXXXXXXXX"

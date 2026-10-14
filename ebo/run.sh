@@ -214,12 +214,34 @@ fi
 
 # --- EBO SE robots (LAN / TUTK) ---
 # The EBO SE is a LOCAL robot (not on the Enabot cloud for streaming); its native bridge + TUTK/bionic
-# runtime live in se_dir (default /share/ebo-se) and are NOT shipped in the image (see docs/EBO-SE.md).
+# runtime live in se_dir (default /share/ebo) and are NOT shipped in the image (see docs/EBO-SE.md).
 # Two ways to get each robot's TUTK credentials:
 #   (a) se_cloud: true  — log into the ROLA cloud with your email+password and DISCOVER them (plus a
 #       fresh stream-start token), so you hand-extract nothing per robot. Needs the app keys below.
 #   (b) se_robots: [...] — list each robot's credentials manually.
-export EBO_SE_DIR="$(pget se_dir /share/ebo-se)"
+export EBO_SE_DIR="$(pget se_dir /share/ebo)"
+
+# Auto-provision the native stack: the proprietary TUTK libs can't ship in the image, so you drop the
+# bundle (ebo-se-share.tgz: ebo_bridge + lib/ + bionic/) into /share once. On boot we unpack it into
+# se_dir and set perms — no SSH/tar/chmod needed. Re-extracts only when the bridge is missing or the
+# tarball is newer, so it's cheap on every start.
+for _TGZ in "$EBO_SE_DIR/ebo-se-share.tgz" /share/ebo-se-share.tgz /share/ebo.tgz; do
+  [ -f "$_TGZ" ] || continue
+  if [ ! -x "$EBO_SE_DIR/ebo_bridge" ] || [ "$_TGZ" -nt "$EBO_SE_DIR/ebo_bridge" ]; then
+    mkdir -p "$EBO_SE_DIR"
+    echo "[add-on] EBO SE: unpacking native stack from ${_TGZ} -> ${EBO_SE_DIR}"
+    if tar xzf "$_TGZ" -C "$EBO_SE_DIR" 2>/dev/null; then
+      chmod 755 "$EBO_SE_DIR/ebo_bridge" "$EBO_SE_DIR/bionic/linker64" "$EBO_SE_DIR/bionic/linker" 2>/dev/null || true
+      # tar restores the archived files' (older) mtimes, so bump the bridge's mtime past the tarball's
+      # — otherwise it looks stale every boot and we'd re-extract needlessly. A newer dropped tarball
+      # still wins (its mtime > this touch), so replacing the bundle re-provisions as expected.
+      touch "$EBO_SE_DIR/ebo_bridge" 2>/dev/null || true
+    else
+      echo "[add-on] EBO SE: failed to unpack ${_TGZ}"
+    fi
+  fi
+  break
+done
 # app keys + constants you supply (same posture as the cloud models; may equal your EBO HOME keys).
 export EBO_SE_BODY_KEY="$(jq -r '.se_body_key // empty' "$OPTS" 2>/dev/null)"
 export EBO_SE_SIGN_KEY="$(jq -r '.se_sign_key // empty' "$OPTS" 2>/dev/null)"
