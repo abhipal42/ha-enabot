@@ -109,10 +109,20 @@ int main(void){
     unsigned char cin[152]; memset(cin,0,sizeof cin); *(unsigned*)cin=152; strncpy((char*)cin+8,AK,120); *(unsigned*)(cin+144)=15;
     int sid=connectex(UID, slot, cin);
     if(sid<0){ fprintf(stderr,"[bridge] IOTC connect %d, retry in 3s\n",sid); sleep(3); continue; }
-    unsigned char inc[44]; memset(inc,0,sizeof inc); *(unsigned*)inc=44; *(int*)(inc+4)=sid; *(unsigned*)(inc+12)=10;
-    *(const char**)(inc+16)=ID; *(const char**)(inc+20)=TK; *(unsigned*)(inc+24)=1; *(unsigned*)(inc+28)=2; *(unsigned*)(inc+32)=1;
-    unsigned char out[32]; memset(out,0,sizeof out); *(unsigned*)out=32;
-    int av=avstartex(inc,out);
+    /* St_AVClientStartInConfig as a REAL C struct, so the two char* fields land at the correct
+     * offsets on 64-bit too. The old hand-poked layout assumed 4-byte pointers (32-bit); on arm64
+     * the 8-byte account/password pointers overlapped -> avClientStartEx returned -20000
+     * (AV_ER_INVALID_ARG). Field order + the 1/2/1 values mirror the proven 32-bit layout. */
+    struct AVStartIn {
+      unsigned int cb; int iotc_session_id; int iotc_channel_id; unsigned int timeout_sec;
+      const char *account_or_identity; const char *password_or_token;
+      int resend; int security_mode; int auth_type; int reserved0; const char *dtls_cipher_suites;
+    } inc; memset(&inc,0,sizeof inc);
+    inc.cb=(unsigned)sizeof inc; inc.iotc_session_id=sid; inc.timeout_sec=10;
+    inc.account_or_identity=ID; inc.password_or_token=TK;
+    inc.resend=1; inc.security_mode=2; inc.auth_type=1;
+    unsigned char out[64]; memset(out,0,sizeof out); *(unsigned*)out=32;   /* out is all-ints; 32 ok */
+    int av=avstartex(&inc,out);
     if(av<0){ fprintf(stderr,"[bridge] avClientStartEx %d, retry in 3s\n",av); sleep(3); continue; }
     int rdtch = rdt_create ? rdt_create(sid, 5000, 1) : -1;   /* control channel (MAVLink over RDT) */
     fprintf(stderr,"[bridge] connected SID=%d av=%d rdt=%d\n",sid,av,rdtch);
