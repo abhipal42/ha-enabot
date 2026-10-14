@@ -182,6 +182,12 @@ class SEBridge:
                       "eyes": "false", "move_mode": "joystick"}
         self.mqtt = None
         self.frames = 0
+        # drive state: one streamer thread sends the current motor vector; commands just update it.
+        self._drive_ly = 0.0
+        self._drive_rx = 0.0
+        self._drive_buttons = 0
+        self._drive_until = 0.0
+        self._drive_lock = threading.Lock()
 
     # ---- mediamtx: this robot's RTSP/HLS/WebRTC server (same config as ebo_video.py) ----
     def _start_mediamtx(self):
@@ -406,13 +412,12 @@ class SEBridge:
             ly = max(-1.0, min(1.0, float(d.get("ly", 0)) / 100.0))
             rx = max(-1.0, min(1.0, float(d.get("rx", 0)) / 100.0))
             hold = float(d.get("hold", 0) or 0)
-            buttons = int(d.get("buttons", 0) or 0)
-            self._drive(ly, rx, buttons, hold)
+            self._set_drive(ly, rx, int(d.get("buttons", 0) or 0), hold)
         elif leaf == "joystick":
             d = json.loads(payload) if payload else {}
             ly = max(-1.0, min(1.0, float(d.get("y", 0))))
             rx = max(-1.0, min(1.0, float(d.get("x", 0))))
-            self.send_rdt(motor_frame(ly=ly, rx=rx, buttons=1 if (ly or rx) else 0))
+            self._set_drive(ly, rx, 0, 0)
         elif leaf == "dock":
             self.send_rdt(command_frame(CMD_DOCK))
         elif leaf in ("wake", "sleep/set"):
@@ -432,17 +437,31 @@ class SEBridge:
             self.state[name] = "true" if on else "false"
             self._publish_state()
 
-    def _drive(self, ly, rx, buttons, hold):
-        """Send a motor vector, then keep it alive at ~10 Hz for `hold` seconds, then stop.
-        A dead-man's stop guards against a dropped 'stop'."""
-        def run():
-            end = time.time() + max(0.0, hold)
-            self.send_rdt(motor_frame(ly=ly, rx=rx, buttons=buttons or (1 if (ly or rx) else 0)))
-            while hold > 0 and time.time() < end and self._running:
-                self.send_rdt(motor_frame(ly=ly, rx=rx, buttons=buttons or 1))
-                time.sleep(0.1)
-            if hold > 0 or (ly == 0 and rx == 0):
+    def _set_drive(self, ly, rx, buttons, hold):
+        """Update the current motor vector. A streaming client (panel joystick) calls this many
+        times a second; a one-shot (MCP ebo_move) calls it once with a `hold`. Either way the
+        _drive_loop below is the single sender. buttons stays 0 for plain motion (matches the SE's
+        proven driving — a non-zero buttons value is a gamepad-button press, not a motor enable)."""
+        with self._drive_lock:
+            self._drive_ly, self._drive_rx, self._drive_buttons = ly, rx, buttons
+            # how long this command keeps the robot rolling before the dead-man stop; a streaming
+            # client refreshes it continuously, a one-shot uses its own hold.
+            self._drive_until = time.time() + (hold if hold > 0 else 0.5)
+
+    def _drive_loop(self):
+        """The ONLY sender of motor frames: repeat the current vector at ~15 Hz until it expires,
+        then send a single stop. Avoids the overlapping per-command threads that fought each other."""
+        stopped = True
+        while self._running:
+            with self._drive_lock:
+                ly, rx, btn, until = self._drive_ly, self._drive_rx, self._drive_buttons, self._drive_until
+            if time.time() < until and (ly or rx):
+                self.send_rdt(motor_frame(ly=ly, rx=rx, buttons=btn))
+                stopped = False
+            elif not stopped:
                 self.send_rdt(motor_frame(0, 0, buttons=0))
+                stopped = True
+            time.sleep(0.066)
         threading.Thread(target=run, daemon=True).start()
 
     # ---- session pause/resume for standby ----
@@ -498,6 +517,7 @@ class SEBridge:
 
         self._start_mediamtx()
         threading.Thread(target=self._standby_loop, daemon=True).start()
+        threading.Thread(target=self._drive_loop, daemon=True).start()
         self._start_native()
         while self._running:
             self._read_frames()                   # returns when the native bridge exits
