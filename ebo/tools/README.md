@@ -65,27 +65,37 @@ Home Assistant → **Settings → Add-ons → EBO → Configuration**: paste the
 
 # `extract_keys_rola.js` — EBO SE keys from the **ROLA** app
 
-For the **EBO SE** (the LAN/TUTK robot), the add-on's `se_cloud` discovery needs five values from
-the **ROLA** app (package `com.enabot.ebo.intl`), not EBO HOME. This companion script prints all
-five at once, from **your own** running app:
+For the **EBO SE**, the add-on's `se_cloud` discovery needs five values from the **ROLA** app
+(package `com.enabot.ebo.intl`). They come from two places:
+
+**The three crypto keys — read-only, via Frida (ATTACH after login, do NOT spawn):**
 
 | add-on field | ROLA source |
 |---|---|
 | `se_body_key` | `SignatureHelper.bodyEncryptKeyS2` |
 | `se_sign_key` | `SignatureHelper.accessKeySecretS2` |
 | `se_uat_key`  | `SignatureHelper.userAuthTokenKey` |
-| `se_license`  | argument of `TUTK_SDK_Set_License_Key` |
-| `se_authkey`  | `St_IOTCConnectInput.authKey` |
-
-Run it, then **log in** and **open your EBO SE** in the app so each value is populated/used:
 
 ```bash
-frida -U -f com.enabot.ebo.intl -l extract_keys_rola.js
-# or, if ROLA is already running:
-frida -U -n ROLA -l extract_keys_rola.js
+# 1) in the emulator: open ROLA, LOG IN, open your EBO SE (this fills the key fields)
+# 2) with ROLA in the foreground, attach (frontmost):
+frida -U -F -l extract_keys_rola.js
+# (spawning with -f can crash the app's startup checks; attach after login instead)
 ```
 
-Paste each printed value into the matching **Configuration** field (see
-[`../docs/EBO-SE.md`](../docs/EBO-SE.md)). The three keys are 16 characters. As always: these are
-Enabot's app-level constants — don't share them. Tip: the three `SignatureHelper` keys may be the
-**same** as your EBO HOME `payload_key`/`sign_key`; try those first before running Frida.
+The script only *reads* the three static fields — it hooks nothing. Each 16-char key prints once.
+
+**The two TUTK constants — plain literals, via jadx (static, no device):**
+
+`se_license` and `se_authkey` are fixed constants compiled into the app. Decompile your own APK and
+grep for them:
+
+```bash
+jadx -d /tmp/rola-src --no-res "/path/to/rola.apk" 2>/dev/null   # ~2-4 min
+grep -rhoE 'TUTK_SDK_Set_License_Key\("[^"]+"\)' /tmp/rola-src/sources | head -1   # -> se_license
+grep -rhoE 'authKey = "[^"]+"'                     /tmp/rola-src/sources | head -1   # -> se_authkey
+```
+
+Paste all five into the add-on's **Configuration** tab (see [`../docs/EBO-SE.md`](../docs/EBO-SE.md)).
+These are Enabot's app-level constants — don't share them. The three `SignatureHelper` keys may match
+your EBO HOME `payload_key`/`sign_key`; worth trying those first.
