@@ -1,6 +1,8 @@
 # Changelog — Enabot integration
 
 ## 0.28.7 — EBO SE: fix avClientStartEx on arm64 (-20000)
+- Quieter logs: the verbose `[se-disco]` diagnostics are now gated behind add-on log level =
+  `debug` (or shown on discovery failure); silenced the harmless cryptography CFB deprecation warning.
 
 - With DNS fixed, the P2P connect succeeded but the AV channel auth failed with -20000
   (AV_ER_INVALID_ARG): the native bridge built St_AVClientStartInConfig with hand-poked 32-bit

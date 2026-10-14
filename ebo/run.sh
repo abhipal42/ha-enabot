@@ -288,17 +288,19 @@ SE_DISCO=/data/se_discovered.tsv
 NSE_CLOUD=0
 if [ "$(pget se_cloud false)" = "true" ] && [ -n "$EBO_SE_EMAIL" ] && [ -n "$EBO_SE_PASSWORD" ]; then
   echo "[add-on] EBO SE: discovering robots via the ROLA cloud…"
+  # verbose, secret-free diagnostics only when the add-on log level is debug.
+  [ "$EBO_LOG_LEVEL" = "debug" ] && export EBO_SE_DEBUG=1
   if python /app/ebo_se_cloud.py --emit > "$SE_DISCO" 2>/data/se_discover.log; then
     NSE_CLOUD="$(grep -c . "$SE_DISCO" 2>/dev/null)"
     case "$NSE_CLOUD" in ''|*[!0-9]*) NSE_CLOUD=0;; esac
     echo "[add-on] EBO SE: discovered ${NSE_CLOUD} robot(s) from the cloud"
+    # on debug, surface the diagnostics too
+    [ "$EBO_SE_DEBUG" = "1" ] && [ -s /data/se_discover.log ] && sed 's/^/[se-disco] /' /data/se_discover.log | tail -25
   else
-    echo "[add-on] EBO SE: cloud discovery failed — check email/password + app keys"
+    echo "[add-on] EBO SE: cloud discovery failed — check email/password + app keys."
+    # always surface the diagnostics on failure so the cause is visible in the log.
+    [ -s /data/se_discover.log ] && sed 's/^/[se-disco] /' /data/se_discover.log | tail -25
     : > "$SE_DISCO"
-  fi
-  # surface the (secret-free) discovery diagnostics into the add-on log so issues are visible here.
-  if [ -s /data/se_discover.log ]; then
-    sed 's/^/[se-disco] /' /data/se_discover.log | tail -25
   fi
 fi
 
