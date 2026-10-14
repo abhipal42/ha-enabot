@@ -269,6 +269,7 @@ done
 # app keys + constants you supply (same posture as the cloud models; may equal your EBO HOME keys).
 export EBO_SE_BODY_KEY="$(jq -r '.se_body_key // empty' "$OPTS" 2>/dev/null)"
 export EBO_SE_SIGN_KEY="$(jq -r '.se_sign_key // empty' "$OPTS" 2>/dev/null)"
+export EBO_SE_SIGN_KEY_V1="$(jq -r '.se_sign_key_v1 // empty' "$OPTS" 2>/dev/null)"
 export EBO_SE_UAT_KEY="$(jq -r '.se_uat_key // empty' "$OPTS" 2>/dev/null)"
 export EBO_SE_LICENSE_CONST="$(jq -r '.se_license // empty' "$OPTS" 2>/dev/null)"
 export EBO_SE_AUTHKEY_CONST="$(jq -r '.se_authkey // empty' "$OPTS" 2>/dev/null)"

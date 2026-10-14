@@ -51,7 +51,10 @@ LANG = os.environ.get("EBO_SE_LANG", "en")
 LOGIN_REGION = os.environ.get("EBO_SE_LOGIN_REGION", "GB")
 
 BODY_KEY = os.environ.get("EBO_SE_BODY_KEY", "").encode()
-SIGN_KEY = os.environ.get("EBO_SE_SIGN_KEY", "").encode()
+# Two HMAC-SHA1 sign keys in the app: accessKeySecretS2 signs the login body ("sign2"); the plain
+# accessKeySecret signs the other requests (the h3.a path, e.g. user_auth_token).
+SIGN_KEY_S2 = os.environ.get("EBO_SE_SIGN_KEY", "").encode()          # accessKeySecretS2 (login)
+SIGN_KEY_V1 = os.environ.get("EBO_SE_SIGN_KEY_V1", "").encode()       # accessKeySecret (other reqs)
 UAT_KEY = os.environ.get("EBO_SE_UAT_KEY", "").encode()
 
 _ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
@@ -78,15 +81,16 @@ def _q(s):
     return urllib.parse.quote(str(s), safe="")
 
 
-def _sign(method, path, tree):
-    """HMAC-SHA1 over METHOD & path & (urlencoded, &-joined, key-sorted tree) — the ROLA 'sign'."""
-    if not SIGN_KEY:
-        raise CloudError("EBO_SE_SIGN_KEY not set")
+def _sign(method, path, tree, key):
+    """HMAC-SHA1 over METHOD & path & (urlencoded, &-joined, key-sorted tree) — the ROLA 'sign'.
+    `key` is accessKeySecretS2 for the login body, or accessKeySecret for the other requests."""
+    if not key:
+        raise CloudError("sign key not set (need EBO_SE_SIGN_KEY and EBO_SE_SIGN_KEY_V1)")
     kv = "&".join("%s=%s" % (_q(k), _q(json.dumps(v, separators=(",", ":"))
                                        if isinstance(v, (dict, list)) else v))
                   for k, v in sorted(tree.items()))
     canonical = "%s&%s&%s" % (method.upper(), _q(path), _q(kv))
-    return base64.b64encode(hmac.new(SIGN_KEY, canonical.encode(), hashlib.sha1).digest()).decode()
+    return base64.b64encode(hmac.new(key, canonical.encode(), hashlib.sha1).digest()).decode()
 
 
 def _encrypt_body(obj):
@@ -127,9 +131,13 @@ class RolaCloud:
             _diag(label, "HTTPError", e.code, "body~", body)
             raise CloudError("%s HTTP %s" % (label, e.code))
 
-    def _post(self, path, tree):
+    def _post(self, path, tree, sign_key=None):
         tree = dict(tree)
-        tree["sign"] = _sign("POST", path, tree)
+        # signed POSTs carry signature_version/method INSIDE the signed body (the app's h3.a adds
+        # 1.0/SHA1; login sets 1.1 itself). Include them before signing so the canonical matches.
+        tree.setdefault("signature_version", "1.0")
+        tree.setdefault("signature_method", "SHA1")
+        tree["sign"] = _sign("POST", path, tree, sign_key or SIGN_KEY_V1)
         body = json.dumps(tree, separators=(",", ":")).encode()
         req = urllib.request.Request(BASE + path, data=body, method="POST",
                                      headers={"Content-Type": "application/json; charset=utf-8",
@@ -153,7 +161,7 @@ class RolaCloud:
             "timestamp": int(time.time() * 1000),
             "signature_version": "1.1", "signature_method": "SHA1",
         }
-        resp = self._post("/api/v1/s1/users/login/", tree)
+        resp = self._post("/api/v1/s1/users/login/", tree, sign_key=SIGN_KEY_S2)
         cookies = [c.name for c in self.jar]
         _diag("login: resp code=", resp.get("code"), "resp keys=", list(resp.keys()), "cookies=", cookies)
         # the session is the sessionid cookie (set in the response headers). The body is encrypted,
@@ -182,8 +190,13 @@ class RolaCloud:
     def user_auth_token(self, robot_id):
         resp = self._post("/api/v1/robots/robot/%s/user_auth_token/" % robot_id,
                           {"user_id": self.user_id, "device_id": robot_id})
-        d = resp.get("data") or {}
-        tok = d.get("user_auth_token")
+        d = resp.get("data") if isinstance(resp.get("data"), dict) else {}
+        _diag("user_auth_token: code=", resp.get("code"), "error=", resp.get("error"),
+              "resp keys=", list(resp.keys()), "data type=", type(resp.get("data")).__name__,
+              "data keys=", (list(d.keys()) if d else "n/a"))
+        tok = d.get("user_auth_token") or d.get("auth_token") or d.get("token")
+        if not tok and isinstance(resp.get("data"), str):
+            tok = resp.get("data")   # some variants return the token directly as data
         if not tok:
             raise CloudError("no user_auth_token for robot %s (code=%s)" % (robot_id, resp.get("code")))
         return tok
@@ -219,16 +232,25 @@ def discover(email, password):
     c.login()
     out = []
     _skipped = 0
-    for r in c.robots():
-        rid = r.get("robot_id") or r.get("id")
-        uid = r.get("tutk_uid")
-        identity = r.get("tutk_token_identity")
-        token = r.get("tutk_token_value")
+    for b in c.robots():
+        # Each list entry is a BINDING wrapper: the robot record is nested under "robot", and the
+        # user id for user_auth_token is "robot_user_id" at the wrapper level.
+        rec = b.get("robot") if isinstance(b.get("robot"), dict) else b
+        if isinstance(b.get("robot"), dict):
+            _diag("nested robot keys=", list(rec.keys()))
+        user_id = b.get("robot_user_id") or b.get("user_id") or rec.get("robot_user_id")
+        if user_id and c.user_id is None:
+            c.user_id = user_id
+        rid = rec.get("robot_id") or rec.get("id") or b.get("robot_id")
+        uid = rec.get("tutk_uid") or b.get("tutk_uid")
+        identity = rec.get("tutk_token_identity") or b.get("tutk_token_identity")
+        token = rec.get("tutk_token_value") or b.get("tutk_token_value")
         if not (uid and identity and token and rid is not None):
             _skipped += 1
             _diag("skip robot id=", rid, "has uid=", bool(uid), "identity=", bool(identity),
-                  "token=", bool(token), "| keys=", list(r.keys()))
+                  "token=", bool(token), "| rec keys=", list(rec.keys()))
             continue  # not a TUTK/SE robot (e.g. a cloud Air 2 on the same account)
+        r = rec
         try:
             uat = c.user_auth_token(rid)
             ioctl = build_ioctl9930(c.user_id, uat)

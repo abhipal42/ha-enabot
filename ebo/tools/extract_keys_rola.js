@@ -28,6 +28,7 @@
 var WANT = {
   bodyEncryptKeyS2:  'se_body_key',
   accessKeySecretS2: 'se_sign_key',
+  accessKeySecret:   'se_sign_key_v1',
   userAuthTokenKey:  'se_uat_key'
 };
 var seen = {};

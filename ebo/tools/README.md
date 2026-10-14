@@ -74,6 +74,7 @@ For the **EBO SE**, the add-on's `se_cloud` discovery needs five values from the
 |---|---|
 | `se_body_key` | `SignatureHelper.bodyEncryptKeyS2` |
 | `se_sign_key` | `SignatureHelper.accessKeySecretS2` |
+| `se_sign_key_v1` | `SignatureHelper.accessKeySecret` |
 | `se_uat_key`  | `SignatureHelper.userAuthTokenKey` |
 
 ```bash

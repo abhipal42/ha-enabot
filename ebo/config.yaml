@@ -108,9 +108,10 @@ options:
   se_cloud: false
   se_email: ""
   se_password: ""
-  se_body_key: ""        # ROLA bodyEncryptKeyS2 (AES-GCM, 16 chars)
-  se_sign_key: ""        # ROLA accessKeySecretS2 (HMAC-SHA1)
-  se_uat_key: ""         # ROLA userAuthTokenKey (AES-CFB, 16 chars)
+  se_body_key: ""        # ROLA bodyEncryptKeyS2 (AES-GCM, 16 chars) — login body
+  se_sign_key: ""        # ROLA accessKeySecretS2 (HMAC-SHA1) — login sign
+  se_sign_key_v1: ""     # ROLA accessKeySecret (HMAC-SHA1) — signs other requests (e.g. token)
+  se_uat_key: ""         # ROLA userAuthTokenKey (AES-CFB) — stream-start token
   se_license: ""         # TUTK license key (app constant)
   se_authkey: ""         # TUTK connect authKey (app constant)
   se_cloud_host: ebo.enabotserverintl.com
@@ -152,6 +153,7 @@ schema:
   se_password: password?
   se_body_key: password?
   se_sign_key: password?
+  se_sign_key_v1: password?
   se_uat_key: password?
   se_license: password?
   se_authkey: password?
