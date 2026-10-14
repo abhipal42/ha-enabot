@@ -60,3 +60,32 @@ Home Assistant → **Settings → Add-ons → EBO → Configuration**: paste the
   names the class differently, run `frida-ps` to confirm the app is `com.enabot.ebox.intl`, and
   check the class shows up: the script logs `candidate class holding the key fields: <name>`.
 - Still stuck? Open an issue with the app version (Settings → About) — **without** pasting any key.
+
+---
+
+# `extract_keys_rola.js` — EBO SE keys from the **ROLA** app
+
+For the **EBO SE** (the LAN/TUTK robot), the add-on's `se_cloud` discovery needs five values from
+the **ROLA** app (package `com.enabot.ebo.intl`), not EBO HOME. This companion script prints all
+five at once, from **your own** running app:
+
+| add-on field | ROLA source |
+|---|---|
+| `se_body_key` | `SignatureHelper.bodyEncryptKeyS2` |
+| `se_sign_key` | `SignatureHelper.accessKeySecretS2` |
+| `se_uat_key`  | `SignatureHelper.userAuthTokenKey` |
+| `se_license`  | argument of `TUTK_SDK_Set_License_Key` |
+| `se_authkey`  | `St_IOTCConnectInput.authKey` |
+
+Run it, then **log in** and **open your EBO SE** in the app so each value is populated/used:
+
+```bash
+frida -U -f com.enabot.ebo.intl -l extract_keys_rola.js
+# or, if ROLA is already running:
+frida -U -n ROLA -l extract_keys_rola.js
+```
+
+Paste each printed value into the matching **Configuration** field (see
+[`../docs/EBO-SE.md`](../docs/EBO-SE.md)). The three keys are 16 characters. As always: these are
+Enabot's app-level constants — don't share them. Tip: the three `SignatureHelper` keys may be the
+**same** as your EBO HOME `payload_key`/`sign_key`; try those first before running Frida.
