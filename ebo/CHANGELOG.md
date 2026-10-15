@@ -1,5 +1,13 @@
 # Changelog — Enabot integration
 
+## 0.28.12 — EBO SE: trim the panel to what the SE actually has
+
+- The robot page and fullscreen controls now hide features the EBO SE doesn't have — laser, eyes,
+  two-way talk, speaker/call volume, image style, per-robot video quality, motion recording, and the
+  cloud-only "remove from account" — so you only see controls that do something. Driving, night
+  vision, collision avoidance, dock, wake/sleep and listen remain. Also corrected the add-robot
+  note (the SE is configured in the add-on, not via QR pairing).
+
 ## 0.28.11 — EBO SE: charging-telemetry diagnostics
 
 - The SE's `charging` state is unreliable (reads true off the charger). Added a low-rate log of the
