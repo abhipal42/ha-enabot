@@ -31,7 +31,14 @@ HEADERS = {"X-Enabot-Token": TOKEN}
 
 MAX_SPEED = int(os.environ.get("EBO_MAX_SPEED", "45"))
 MAX_SECONDS = float(os.environ.get("EBO_MAX_SECONDS", "2.0"))
-LOOK_TTL = 8.0
+# How long a look stays "fresh" for ebo_move. An agent reasons between the look and the move, so a
+# tight window produced constant "no fresh camera view" refusals; give it room. If a move finds the
+# look stale it auto-looks rather than refusing, so this just controls how often that extra grab fires.
+LOOK_TTL = float(os.environ.get("EBO_LOOK_TTL", "25"))
+# uvicorn idle keep-alive (seconds). Default is 5, so a pooled HTTP connection is dropped during any
+# pause between tool calls and the next call hits a dead socket (ECONNRESET), then reconnects. Hold
+# connections open across normal reasoning gaps so that first-call reset stops happening.
+KEEPALIVE = int(os.environ.get("EBO_MCP_KEEPALIVE", "120"))
 
 # Bearer-token auth: the client must present the add-on's api_token. Without a token we refuse to
 # start (an unauthenticated robot-driving endpoint on the LAN would be unsafe).
@@ -128,21 +135,27 @@ async def ebo_wake(node: str = "") -> str:
 
 @mcp.tool()
 async def ebo_move(node: str = "", direction: str = "forward",
-                   speed: int = 25, seconds: float = 1.0) -> str:
-    """Drive a short step. direction ∈ {forward, back, left, right, forward_left, forward_right,
-    back_left, back_right}. speed 1-100 (capped), seconds capped. SAFETY: you MUST have called
-    ebo_look in the last few seconds — this refuses to move otherwise, to avoid driving blind."""
+                   speed: int = 25, seconds: float = 1.0):
+    """Drive a short step, then return a FRESH snapshot of what the robot sees afterward (plus a status
+    line) — so a look → move → move loop works without a separate ebo_look between steps.
+    direction ∈ {forward, back, left, right, forward_left, forward_right, back_left, back_right}.
+    speed 1-100 (capped), seconds capped. SAFETY: driving needs a current camera view; if the last look
+    is stale this grabs a fresh one itself first and refuses only if the camera is down (then ebo_wake)."""
     robots = await _robots()
     node = _node(robots, node)
     if direction not in _DIRS:
         return "invalid direction; use one of: " + ", ".join(_DIRS)
-    ago = time.time() - _last_look.get(node, 0)
-    if ago > LOOK_TTL:
-        return (f"refused: no fresh camera view (last look {ago:.0f}s ago). Call ebo_look, confirm "
-                f"the path is clear, then move.")
     st = await ebo_state.fn(node) if hasattr(ebo_state, "fn") else {}
     if str(st.get("charging")) == "true" or str(st.get("docked")) == "true":
         return "refused: the robot is on the charging base."
+    # Freshness: instead of refusing on a stale look, grab a fresh frame ourselves so the robot is never
+    # driven without a current view. Refuse only if that grab fails (camera asleep/down).
+    if time.time() - _last_look.get(node, 0) > LOOK_TTL:
+        chk = await _get("/api/snapshot", params={"node": node})
+        if chk.status_code != 200 or not chk.content:
+            return (f"refused: couldn't get a fresh camera view before moving (HTTP {chk.status_code}). "
+                    f"Call ebo_wake, wait ~2 s, then retry.")
+        _last_look[node] = time.time()
     spd = max(1, min(int(speed), MAX_SPEED))
     secs = max(0.1, min(float(seconds), MAX_SECONDS))
     ly_u, rx_u = _DIRS[direction]
@@ -162,7 +175,16 @@ async def ebo_move(node: str = "", direction: str = "forward",
         await asyncio.sleep(0.12)
         await _cmd(node, "move/vector", vec)
     await _cmd(node, "move/vector", json.dumps({"ly": 0, "rx": 0, "hold": 0, "buttons": 0}))
-    return f"moving {direction} at speed {spd} for {secs:.1f}s. Re-look before the next move."
+    msg = f"moved {direction} at speed {spd} for {secs:.1f}s — fresh view below. Re-check it before the next move."
+    # Return the post-move view so the agent sees the result in one call (no separate ebo_look needed).
+    try:
+        r = await _get("/api/snapshot", params={"node": node})
+        if r.status_code == 200 and r.content:
+            _last_look[node] = time.time()
+            return [Image(data=r.content, format="jpeg"), msg]
+    except Exception:
+        pass
+    return msg + " (snapshot unavailable — call ebo_look.)"
 
 
 @mcp.tool()
@@ -227,5 +249,12 @@ async def ebo_say(node: str = "", text: str = "") -> str:
 if __name__ == "__main__":
     if not TOKEN:
         raise SystemExit("[mcp] refusing to start without EBO_API_TOKEN (unauthenticated driving is unsafe)")
-    print("[mcp] EBO MCP server on http://0.0.0.0:%d (bearer-token auth)" % PORT, flush=True)
-    mcp.run(transport="http", host="0.0.0.0", port=PORT)  # nosec B104 - inside the add-on container; bearer-token auth is enforced above
+    print("[mcp] EBO MCP server on http://0.0.0.0:%d (bearer-token auth, keep-alive %ds)" % (PORT, KEEPALIVE), flush=True)
+    try:
+        # Hold idle connections open across pauses between tool calls so the next call doesn't land on a
+        # dropped socket (ECONNRESET). uvicorn_config is forwarded to uvicorn.Config by the http transport.
+        mcp.run(transport="http", host="0.0.0.0", port=PORT,  # nosec B104 - in-container; bearer auth enforced above
+                uvicorn_config={"timeout_keep_alive": KEEPALIVE})
+    except TypeError:
+        # Older FastMCP without uvicorn_config passthrough: start without the keep-alive tweak.
+        mcp.run(transport="http", host="0.0.0.0", port=PORT)  # nosec B104

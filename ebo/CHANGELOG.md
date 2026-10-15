@@ -1,5 +1,17 @@
 # Changelog — Enabot integration
 
+## 0.28.16 — MCP: smoother driving experience
+
+- **No more first-call `ECONNRESET`.** The MCP server kept uvicorn's default 5 s idle keep-alive, so a
+  pause between tool calls dropped the pooled connection and the next call hit a dead socket. Raised the
+  keep-alive to 120 s (`EBO_MCP_KEEPALIVE`), so connections survive normal reasoning gaps.
+- **`ebo_move` returns a fresh post-move snapshot** (image + status line), so a look → move → move loop
+  no longer needs a separate `ebo_look` between steps.
+- **`ebo_move` auto-looks when the view is stale** instead of refusing — it grabs a fresh frame itself
+  and only refuses if the camera is actually down (then `ebo_wake`).
+- **Longer look freshness window:** `LOOK_TTL` 8 s → 25 s (`EBO_LOOK_TTL`), so brief reasoning gaps no
+  longer trigger "no fresh camera view".
+
 ## 0.28.15 — EBO SE: fix frozen camera after standby
 
 - When the robot came back from auto-standby, the live camera stayed stuck on one frozen frame until
