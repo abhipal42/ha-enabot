@@ -1,5 +1,11 @@
 # Changelog — Enabot integration
 
+## 0.28.11 — EBO SE: charging-telemetry diagnostics
+
+- The SE's `charging` state is unreliable (reads true off the charger). Added a low-rate log of the
+  raw battery-status frame so the real charge-state byte can be identified, then the parse fixed.
+  Battery % is accurate; `charging` should be treated as provisional until this lands.
+
 ## 0.28.10 — EBO SE: fix inverted forward/back
 
 - Driving works; the forward/back (ly) axis was inverted — pushing up drove backward. Negate ly in

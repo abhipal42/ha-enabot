@@ -366,6 +366,14 @@ class SEBridge:
                 msgid = u[i + 5] if i + 5 < len(u) else -1
                 if msgid == 207 and i + 24 <= len(u):      # BATTERY_STATUS
                     bp, cs = u[i + 22], u[i + 23]
+                    # charging at byte 23 looks unreliable (reads 'charging' off the charger). Log the
+                    # whole frame at a low rate (first one, then ~every 60th) so the real charge-state
+                    # byte can be identified and the parse fixed; this diagnostic is removed afterward.
+                    self._statlog = getattr(self, "_statlog", 0) + 1
+                    if self._statlog == 1 or self._statlog % 60 == 0:
+                        frame = bytes(u[i:i + 8 + plen + 2])
+                        log("[se] batt207 bp@22=%d cs@23=%d plen=%d raw=%s"
+                            % (bp, cs, plen, frame.hex()))
                     changed = (str(bp) != str(self.state.get("battery")) or
                                ("true" if cs else "false") != self.state.get("charging"))
                     self.state["battery"] = bp
