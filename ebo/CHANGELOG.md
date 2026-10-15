@@ -1,5 +1,12 @@
 # Changelog — Enabot integration
 
+## 0.28.14 — EBO SE: drive via the MCP server (buttons=0 + stream vectors)
+
+- Driving through the MCP server (`ebo_move`) still didn't move the robot after the streaming fix
+  because it sent `buttons=1`. The EBO SE drives with `buttons=0` (the field is a gamepad-button
+  bitmask, not a motor enable — see 0.28.8). `ebo_move` now streams a `buttons=0` move/vector every
+  120 ms for the requested duration, then sends an explicit stop. Requires an add-on update.
+
 ## 0.28.12 — EBO SE: trim the panel to what the SE actually has
 
 - The robot page and fullscreen controls now hide features the EBO SE doesn't have — laser, eyes,

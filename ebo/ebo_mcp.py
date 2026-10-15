@@ -149,11 +149,13 @@ async def ebo_move(node: str = "", direction: str = "forward",
     mag = math.hypot(ly_u, rx_u) or 1.0
     ly = round(ly_u / mag * spd)
     rx = round(rx_u / mag * spd)
-    # The robot only moves WHILE fresh vectors keep arriving: the panel streams move/vector at ~8 Hz
-    # the whole time a stick is held (panel.py _fsDriveTick), and `hold` is a short per-packet watchdog
-    # (~0.6 s), not a duration. A single packet with hold=secs is honored for one tick, then the motors
-    # stop — the robot just blips once. So stream the vector for `secs`, then send an explicit stop.
-    vec = json.dumps({"ly": ly, "rx": rx, "hold": 0.6, "buttons": 1})
+    # The robot only moves WHILE fresh vectors keep arriving: the panel streams move/vector the whole
+    # time a stick is held, and `hold` is a short per-packet dead-man (~0.5 s), not a duration. A single
+    # packet with hold=secs is honored for one tick, then the motors stop — the robot just blips once.
+    # Also: the EBO SE drives with buttons=0 (the field is a gamepad-button bitmask, not a motor enable;
+    # see CHANGELOG 0.28.8) — buttons=1 does not drive it. So stream a buttons=0 vector for `secs`, then
+    # send an explicit stop.
+    vec = json.dumps({"ly": ly, "rx": rx, "hold": 0.6, "buttons": 0})
     deadline = time.time() + secs
     await _cmd(node, "move/vector", vec)
     while time.time() < deadline:
