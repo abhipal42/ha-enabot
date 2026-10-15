@@ -792,8 +792,8 @@ dialog .in{padding:18px}h3{margin:0 0 10px}.note{font-size:12px;color:#8a929a;ma
       <button class="btn pri" onclick="pairStart()">Generate QR</button>
     </div>
     <div class="note">The robot joins this Wi-Fi by scanning a QR — no phone needed.<br>
-      This is for cloud models (Air 2, X, Max…). An <b>EBO SE</b> uses local LAN — use the
-      <b>ebo-se-lan-bridge</b> project instead.</div>
+      This QR pairing is for cloud models (Air 2, X, Max…). An <b>EBO SE</b> connects over your LAN —
+      add it in the add-on <b>Configuration</b> tab (see docs/EBO-SE.md), not here.</div>
   </div>
   <div id="addqr" style="display:none;text-align:center">
     <p>Turn the robot on, then <b>hold its camera up to this QR code</b>:</p>
@@ -1271,6 +1271,7 @@ let fsJoySide  = localStorage.getItem('ebo_fsjoyside') || 'left';   // single-jo
 function fsTop(node){
   const r=ROBOTS.find(x=>x.node===node)||{}, st=r.state||{};
   const laserOn=(st.laser==='true');
+  const se = /SE/i.test(r.model||'');   // EBO SE: no laser / two-way talk
   return `<div class="fs-info">
       <button class="fs-ic" onclick="exitFS()" title="Back" style="width:40px;height:40px;font-size:24px">‹</button>
       <span class="b" id="fs-badge2">···</span>
@@ -1280,10 +1281,10 @@ function fsTop(node){
       <span class="vu mic" id="vu-mic" title="Your microphone (what the robot hears)">🎤<span class="bar"><i></i><span class="pk"></span></span></span>
     </div>
     <div class="fs-actions">
-      <button class="fs-ic ${laserOn?'on':''}" id="fs-laser" onclick="toggleLaser('${node}')" title="Laser pointer (play with the cat)">🎯</button>
+      ${se?'':`<button class="fs-ic ${laserOn?'on':''}" id="fs-laser" onclick="toggleLaser('${node}')" title="Laser pointer (play with the cat)">🎯</button>`}
       <button class="fs-ic" id="fs-night" onclick="cycleNight('${node}')" title="Day/Night vision">${NV_ICON[st.night_vision]||'🌗'}</button>
       <button class="fs-ic" id="fs-listen" onclick="toggleListen('${node}')" title="Listen to the robot">🔇</button>
-      <button class="fs-ic" id="fs-talk" onclick="toggleTalk('${node}')" title="Talk to the robot (hold a conversation)">🎤</button>
+      ${se?'':`<button class="fs-ic" id="fs-talk" onclick="toggleTalk('${node}')" title="Talk to the robot (hold a conversation)">🎤</button>`}
       ${st.routes_supported==='true' ? `<button class="fs-ic ${st.route_recording==='true'?'rec':''}" id="fs-rec" onclick="recordRoute('${node}')" title="Record a route (drive to teach a path)">⏺</button>` : ''}
       <button class="fs-ic" onclick="cmd('${node}','dock','')" title="Send it back to the charging base">🔌</button>
       <button class="fs-ic" onclick="openFsSettings()" title="Settings">⚙</button>
@@ -1341,6 +1342,10 @@ function fsTab(name){
 }
 function openFsSettings(){
   const d=document.getElementById('fsopts'); const r=ROBOTS.find(x=>x.node===fsNode)||{}, st=r.state||{};
+  // EBO SE: hide the tabs/controls it doesn't have (Audio volume/talk; per-robot video quality).
+  const se = /SE/i.test(r.model||'');
+  const audTab=document.querySelector('#fsopts .tab[data-tab="aud"]'); if(audTab) audTab.style.display=se?'none':'';
+  const vqRow=document.getElementById('fs-vq'); if(vqRow&&vqRow.previousElementSibling){ vqRow.style.display=se?'none':''; vqRow.previousElementSibling.style.display=se?'none':''; }
   // Driving tab: driving mode, movement speed, collision avoidance
   document.getElementById('fs-dm').innerHTML=opt(DM, st.move_mode);
   document.getElementById('fs-avoid').checked = st.avoid_obstacle==='true';
@@ -1747,6 +1752,7 @@ function listView(){
 function detailView(r){
   const st=r.state||{}, cam=(r.camera==='on');
   const charging = (st.charging===true || st.charging==='true');
+  const se = /SE/i.test(r.model||'');   // EBO SE: hide controls it lacks (laser, eyes, talk/volume, image style)
   return `<div class="detail">
     <div class="bigwrap ${cam?'':'asleep'}" onclick="enterFS('${r.node}')" title="Tap for fullscreen">
       <img class="big prev" data-node="${r.node}" src="${B}/api/snapshot?node=${encodeURIComponent(r.node)}&t=${Date.now()}" onerror="this.style.opacity=.25">
@@ -1764,7 +1770,7 @@ function detailView(r){
       <button id="d-cam" class="btn ${cam?'pri':''}" onclick="cmd('${r.node}','camera/set','${cam?'off':'on'}')">${cam?'Camera ON':'Camera OFF'}</button>
       <button class="btn" onclick="wakeRobot('${r.node}')">☀ Wake</button>
       <button class="btn" onclick="sleepRobot('${r.node}')">😴 Sleep (Zz)</button>
-      <button id="d-laser" class="btn ${st.laser==='true'?'pri':''}" onclick="toggleLaser('${r.node}')">Laser ${st.laser==='true'?'ON':'OFF'}</button>
+      ${se?'':`<button id="d-laser" class="btn ${st.laser==='true'?'pri':''}" onclick="toggleLaser('${r.node}')">Laser ${st.laser==='true'?'ON':'OFF'}</button>`}
       <button class="btn" onclick="cmd('${r.node}','dock','')">Dock</button>
     </div>
     <div class="sec"><h4>Remote control</h4>
@@ -1786,28 +1792,28 @@ function detailView(r){
     </div>
     <div class="sec"><h4>Camera &amp; display</h4>
       <label>Night vision</label><select onchange="cmd('${r.node}','night_vision/set',this.value)">${opt(NV,st.night_vision)}</select>
-      <label>Video quality</label><select onchange="cmd('${r.node}','video_quality/set',this.value)">${opt(VQ,st.video_quality)}</select>
+      ${se?'':`<label>Video quality</label><select onchange="cmd('${r.node}','video_quality/set',this.value)">${opt(VQ,st.video_quality)}</select>
       <label>Image style</label><select onchange="cmd('${r.node}','image_style/set',this.value)">${opt(IS,st.image_style)}</select>
-      <label>Eyes</label><select onchange="cmd('${r.node}','eyes/set',this.value)">${opt(EY,st.eyes)}</select>
+      <label>Eyes</label><select onchange="cmd('${r.node}','eyes/set',this.value)">${opt(EY,st.eyes)}</select>`}
     </div>
     <div class="sec"><h4>Audio</h4>
       <label class="tgl"><span>Listen — hear the robot's microphone</span>
         <input type="checkbox" ${st.listen!=='false'?'checked':''} onchange="cmd('${r.node}','listen/set',this.checked?'on':'off')"></label>
       <div class="note" style="font-size:11px;color:#8a929a;margin-top:2px">The audio comes through the camera stream — unmute the player to hear it.</div>
-      <label>Speaker volume — the robot's own voice &amp; sounds (${st.volume??st.playback_volume??'—'})</label>
+      ${se?'':`<label>Speaker volume — the robot's own voice &amp; sounds (${st.volume??st.playback_volume??'—'})</label>
       <input type="range" min="0" max="100" value="${st.volume??st.playback_volume??50}" onchange="cmd('${r.node}','volume/set',this.value)">
       <label>Call volume — your voice through the robot, two-way talk (${st.talkback_volume??'—'})</label>
-      <input type="range" min="0" max="100" value="${st.talkback_volume??50}" onchange="cmd('${r.node}','talkback_volume/set',this.value)">
+      <input type="range" min="0" max="100" value="${st.talkback_volume??50}" onchange="cmd('${r.node}','talkback_volume/set',this.value)">`}
     </div>
-    <div class="sec"><h4>Recording</h4>
+    ${se?'':`<div class="sec"><h4>Recording</h4>
       <label class="tgl"><span>Motion recording — logs the robot's activity (not a path)</span>
         <input type="checkbox" ${st.sports_record==='true'?'checked':''} onchange="cmd('${r.node}','sports_record/set',this.checked?'on':'off')"></label>
-    </div>
+    </div>`}
     ${st.routes_supported==='true' ? `<div class="sec"><h4>Routes — teach &amp; repeat</h4>
       <div id="d-routes">${routesHtml(r)}</div>
       <div class="note" style="font-size:11px;color:#8a929a;margin-top:8px">Record a new route from the ⛶ fullscreen view: tap ⏺ to start, drive the path, tap ⏺ again to stop, then name &amp; save it. Repeat any saved route here.</div>
     </div>` : ''}
-    <div class="row" style="margin-top:14px"><button class="btn danger" onclick="removeRobot('${r.node}')">🗑 Remove from account</button></div>
+    ${se?'':`<div class="row" style="margin-top:14px"><button class="btn danger" onclick="removeRobot('${r.node}')">🗑 Remove from account</button></div>`}
   </div>`;
 }
 let lastSig=null;
