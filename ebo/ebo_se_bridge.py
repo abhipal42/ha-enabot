@@ -498,6 +498,18 @@ class SEBridge:
         self.paused = False
         self._ff_primed = False
         self.frames = 0
+        # Drop the ffmpeg left over from before standby. While paused no frames arrive, so its RTSP
+        # publish to mediamtx goes stale; and _read_frames only restarts ffmpeg when self.ff is None
+        # or the codec changes. A same-codec resume would therefore feed the dead encoder forever and
+        # the snapshot stays frozen until the add-on is restarted. Clearing it here makes the first
+        # frame spawn a fresh ffmpeg. (Safe from the old read loop: it exited when _pause terminated
+        # the native bridge, long before the standby timeout that triggers resume.)
+        for fn in ((self.ff.stdin.close if self.ff else None), (self.ff.kill if self.ff else None)):
+            try:
+                fn and fn()
+            except Exception:
+                pass
+        self.ff = None
         log("[se] resuming session")
         self._start_native()
         threading.Thread(target=self._read_frames, daemon=True).start()

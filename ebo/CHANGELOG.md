@@ -1,5 +1,14 @@
 # Changelog — Enabot integration
 
+## 0.28.15 — EBO SE: fix frozen camera after standby
+
+- When the robot came back from auto-standby, the live camera stayed stuck on one frozen frame until
+  the add-on was restarted. Cause: `_pause()` released the native bridge but left the old `ffmpeg`
+  running, and `_resume()` never cleared it — `_read_frames` only restarts `ffmpeg` when there is none
+  or the codec changes, so a same-codec resume kept feeding the stale encoder (whose RTSP publish had
+  gone dead during the idle) and the snapshot never updated. `_resume()` now drops the leftover
+  `ffmpeg` so the first frame after waking spawns a fresh one. Requires an add-on update.
+
 ## 0.28.14 — EBO SE: drive via the MCP server (buttons=0 + stream vectors)
 
 - Driving through the MCP server (`ebo_move`) still didn't move the robot after the streaming fix
